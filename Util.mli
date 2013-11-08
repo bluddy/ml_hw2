@@ -56,7 +56,7 @@ val list_last : 'a list -> 'a
 val list_remove : 'a -> 'a list -> 'a list
 
 (* must have an ordered list of indices *)
-(* returns acc_take, acc_drop *)
+(* returns acc_take, acc_drop, and our indices indicate the 'drop' collection *)
 val list_partition_idxs : int list -> 'a list -> 'a list * 'a list
 
 (* must have an ordered list of indices *)

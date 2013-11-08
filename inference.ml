@@ -52,7 +52,9 @@ let run () =
   | _          -> failwith "NA"
 
 let _ = 
-  parse_cmd_line ();
-  run ();
+  if !Sys.interactive then ()
+  else
+    parse_cmd_line ();
+    run ();
 
 

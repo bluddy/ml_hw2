@@ -112,7 +112,7 @@ let diff l1 l2 =
 let condition cpd sorted_idxs : (string list, cpd_line list) Hashtbl.t =
   let hash = Hashtbl.create 10 in
   List.iter (fun (vars, p) ->
-    let keys, values = list_partition_idxs sorted_idxs vars in
+    let values, keys = list_partition_idxs sorted_idxs vars in
     try
       let oldvals = Hashtbl.find hash keys in
       Hashtbl.replace hash keys ((values, p)::oldvals)
@@ -120,6 +120,8 @@ let condition cpd sorted_idxs : (string list, cpd_line list) Hashtbl.t =
   ) cpd.data;
   hash
     
+(* bug: can't sort indices, lose position of vars *)
+
 let product cpd1 cpd2 =
   let vars_common, indices1, indices2 = intersect cpd1.vars cpd2.vars in
   (* we need sorted indices to remove efficiently *)
@@ -147,11 +149,63 @@ let product cpd1 cpd2 =
   in
   {vars=new_vars; data=new_data}
 
+(* ******* tests *************************************)
 
+let test_cpd = {vars=["a";"b"]; 
+                data=[
+                  ["0";"0"], 0.5;
+                  ["1";"0"], 0.5;
+                  ["0";"1"], 0.2;
+                  ["1";"1"], 0.8;
+                ]
+                }
 
+let test_cpd' = {vars=["c";"b"]; 
+                data=[
+                  ["0";"0"], 0.3;
+                  ["1";"0"], 0.6;
+                  ["0";"1"], 0.7;
+                  ["1";"1"], 0.;
+                ]
+                }
 
-
-
+let condition_test () = condition test_cpd [1]
   
+let product_test () = product test_cpd test_cpd'
+
+let test_cpd2 = {vars=["a";"b";"c"]; 
+                data=[
+                  ["0";"0";"0"], 0.5;
+                  ["0";"0";"1"], 0.25;
+                  ["0";"1";"0"], 0.2;
+                  ["0";"1";"1"], 0.8;
+                  ["1";"0";"0"], 0.75;
+                  ["1";"0";"1"], 0.6;
+                  ["1";"1";"0"], 0.4;
+                  ["1";"1";"1"], 0.1;
+                ]
+                }
+
+let test_cpd2' = {vars=["c";"d";"b"]; 
+                data=[
+                  ["0";"0";"0"], 0.9;
+                  ["0";"0";"1"], 0.15;
+                  ["0";"1";"0"], 0.32;
+                  ["0";"1";"1"], 0.45;
+                  ["1";"0";"0"], 0.22;
+                  ["1";"0";"1"], 0.55;
+                  ["1";"1";"0"], 0.11;
+                  ["1";"1";"1"], 0.0;
+                ]
+                }
+  
+let condition_test2 () = 
+  let h = condition test_cpd2 [0;2] in
+  Hashtbl.find h ["0";"0"], 
+  Hashtbl.find h ["0";"1"], 
+  Hashtbl.find h ["1";"0"], 
+  Hashtbl.find h ["1";"1"]
+  
+let product_test2 () = product test_cpd2 test_cpd2'
 
 
