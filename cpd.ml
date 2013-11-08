@@ -1,20 +1,19 @@
 open Util
 
-type cpd_line = string * string list * float
+type cpd_line = string list * float
 
-type cpd = {var:string;
-            deps:string list;
+type cpd = {vars:string list;
             data:cpd_line list;
            }
 
-let string_of_cpd {var; deps; data} : string =
+let string_of_cpd {vars; data} : string =
   let s_list =
-    [Printf.sprintf "%s | " var;
-    String.concat ", " deps;
-    "data:"]@
-    List.map (fun (lhs, rhs_deps, p) ->
-      let dep_s = String.concat ", " rhs_deps in
-      Printf.sprintf "%s | %s -> %f" lhs dep_s p
+    [Printf.sprintf "%s | " (hd vars)^
+     String.concat ", " @: tl vars;
+     "data:"]@
+    List.map (fun (deps, p) ->
+      let dep_s = String.concat ", " @: tl deps in
+      Printf.sprintf "%s | %s -> %f" (hd deps) dep_s p
     ) data
   in
   String.concat "\n" s_list
@@ -43,10 +42,11 @@ let parse_cpd file =
     in
     (* if it's the same var, add. otherwise add a cpd *)
     match acc with
-    | x::xs when x.var = var_name -> 
-        {x with data = (var_val, dep_vals, p)::x.data}::xs
+    | x::xs when hd(x.vars) = var_name -> 
+        {x with data = (var_val::dep_vals, p)::x.data}::xs
     | xs ->
-        {var = var_name; deps=dep_names; data = [var_val, dep_vals, p]}::xs
+        {vars = var_name::dep_names; data = [var_val::dep_vals, p]}::xs
   )
   []
   lines
+
