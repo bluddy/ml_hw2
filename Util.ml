@@ -84,6 +84,19 @@ let list_remove r l =
     | []    -> List.rev acc
   in loop [] l
 
+(* assumes an ordered list of indices to remove! *)
+(* returns acc_take, acc_drop *)
+let list_partition_idxs is xs =
+  let rec loop acc_take acc_drop idx is xs = match xs, is with
+    | x::xs, i::is when idx = i -> loop acc_take (x::acc_drop) (idx+1) is xs (* don't add *)
+    | x::xs, ((i::is) as is')   -> loop (x::acc_take) acc_drop (idx+1) is' xs
+    | x::xs, []                 -> (List.rev acc_take)@xs, List.rev acc_drop
+    | [],    _                  -> List.rev acc_take, List.rev acc_drop
+  in loop [] [] 0 is xs
+
+(* assumes an ordered list of indices to remove! *)
+let list_remove_idxs is xs = fst @: list_partition_idxs is xs
+
 let compose_fn f g x = f(g x)
 
 (* function that folds until a predicate is true *)
@@ -273,6 +286,18 @@ let nub xs =
     let blank = Hashtbl.create (List.length xs) in
     List.iter (fun x -> Hashtbl.replace blank x ()) xs;
     Hashtbl.fold (fun h () t -> h :: t) blank []
+
+let find_idx y xs =
+  let rec loop i = function
+    | []             -> None
+    | x::xs when y=x -> Some i
+    | x::xs          -> loop (i+1) xs
+  in
+  loop 0 xs
+
+     
+
+
 
 (* --- Array function --- *)
 

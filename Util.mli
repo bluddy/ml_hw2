@@ -55,6 +55,13 @@ val list_last : 'a list -> 'a
 (* will only remove one instance of x in xs (as opposed to filter) *)
 val list_remove : 'a -> 'a list -> 'a list
 
+(* must have an ordered list of indices *)
+(* returns acc_take, acc_drop *)
+val list_partition_idxs : int list -> 'a list -> 'a list * 'a list
+
+(* must have an ordered list of indices *)
+val list_remove_idxs : int list -> 'a list -> 'a list
+
 val compose_fn : ('a -> 'b) -> ('c -> 'a) -> 'c -> 'b
 
 (* fold left until the predicate (2nd arg) is true *)
@@ -129,6 +136,8 @@ val cartesian_product : 'a list -> 'b list -> ('a * 'b) list
 
 (* unique members of a list *)
 val nub : 'a list -> 'a list
+
+val find_idx : 'a -> 'a list -> int option
 
 val array_find : ('a -> bool) -> 'a array -> int * 'a
 
