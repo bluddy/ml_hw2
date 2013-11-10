@@ -11,9 +11,13 @@ let empty_cpd = {vars=[||]; data=[]}
 let string_of_cpd {vars; data} : string =
   let vars = Array.to_list vars in
   let s_list =
-    [Printf.sprintf "%s | " (hd vars)^
-     String.concat ", " @: tl vars;
-     "data:"]@
+    (match vars with 
+     | []  -> ["!!! Empty vars !!!";"data:"]
+     | [x] -> [x;"data:"]
+     | _   ->
+      [Printf.sprintf "%s | " (hd vars)^
+      String.concat ", " @: tl vars;
+      "data:"])@
     List.map (fun (deps, p) ->
       let deps = Array.to_list deps in
       let dep_s = String.concat ", " @: tl deps in
@@ -33,8 +37,9 @@ let parse_cpd file =
   in
   let f = read_file file in
   let lines = lines f in
+  let h = Hashtbl.create 10 in
   (* accumulate cpds *)
-  List.fold_left (fun acc line ->
+  List.iter (fun line ->
     let elems = r_split " " line in
     let var_name, var_val = get_key_val @: hd elems in
     (* get dependencies *)
@@ -42,18 +47,16 @@ let parse_cpd file =
     let dep_names, dep_vals = List.split @: 
       List.map (fun str -> get_key_val str) dep_list in
     (* get prob value *)
-    let p = float_of_string @: at elems 2
+    let p = float_of_string @: at elems 2 in
+    let key = Array.of_list @: var_name::dep_names in
+    let cpd_line = Array.of_list(var_val::dep_vals), p in
+    let cpd = try Hashtbl.find h key 
+              with Not_found -> {vars=key; data=[]} (* create a new cpd *)
     in
-    (* if it's the same dep var, add. otherwise add a cpd *)
-    match acc with
-    | x::xs when (x.vars.(0)) = var_name -> 
-        {x with data = (Array.of_list(var_val::dep_vals), p)::x.data}::xs
-    | xs ->
-        {vars = Array.of_list(var_name::dep_names); 
-         data = [Array.of_list(var_val::dep_vals), p]}::xs
-  )
-  []
-  lines
+    let cpd' = {cpd with data=cpd_line::cpd.data} in
+    Hashtbl.replace h key cpd'
+  ) lines;
+  Hashtbl.fold (fun k v acc -> v::acc) h []
 
 (*  let var_nums = List.flatten @:
     list_mapi (fun (i, var) -> if List.mem var vars then [i] else []) cpd.vars *)

@@ -13,11 +13,12 @@ and node = {id: int;
              mutable node_cpd: cpd
 }
 
-let string_of_node {id; scope; edges} = 
+let string_of_node {id; scope; edges; node_cpd} = 
   let scope_s = String.concat ", " (Array.to_list scope) in
   let edge_ids = List.map (fun {node;_} -> string_of_int node.id) edges in
   let edges_s = String.concat "," edge_ids in
-  Printf.sprintf "id: %d\nscope: %s\nedges: %s\n" id scope_s edges_s
+  let cpd_s = string_of_cpd node_cpd in
+  Printf.sprintf "id: %d\nscope: %s\nedges: %s\ncpd: %s\n" id scope_s edges_s cpd_s
 
 let tree_fold fn init tree =
   let rec loop acc node m_last_id =
@@ -69,12 +70,20 @@ let parse_clique_tree file =
 
 (* find the cpds relating to a node and multiply them *)
 let cpd_of_node node cpd_set =
-  Hashtbl.fold (fun cpd _ acc_cpd ->
+  let c = Hashtbl.fold (fun cpd _ acc_cpd ->
     if subset cpd.vars node.scope then
       (Hashtbl.remove cpd_set cpd;
-      product acc_cpd cpd)
+      let prod = product acc_cpd cpd in
+      if prod.data = [] then
+        (let s1 = string_of_cpd acc_cpd in
+          let s2 = string_of_cpd cpd in
+        failwith @: "whoops:\n"^s1^"\n"^s2);
+      prod)
     else acc_cpd
   ) cpd_set empty_cpd
+  in
+  (*print_endline @: string_of_cpd c;*)
+  c
 
 let tree_fill_cpds tree cpd_list =
   let h = Hashtbl.create 10 in
