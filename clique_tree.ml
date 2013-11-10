@@ -1,12 +1,19 @@
 open Util
+open Cpd
 
-type node = {id: int;
+type edge = {
+  node: node;
+  mutable sepset: string array;
+  mutable cpd: cpd
+}
+
+and node = {id: int;
              scope: string list;
-             mutable edges: node list}
+             mutable edges: edge list}
 
 let string_of_node {id; scope; edges} = 
   let scope_s = String.concat ", " scope in
-  let edge_ids = List.map (fun x -> string_of_int x.id) edges in
+  let edge_ids = List.map (fun {node;_} -> string_of_int node.id) edges in
   let edges_s = String.concat "," edge_ids in
   Printf.sprintf "id: %d\nscope: %s\nedges: %s\n" id scope_s edges_s
 
@@ -14,7 +21,7 @@ let tree_fold fn init tree =
   let rec loop acc node m_last_id =
     let newacc = fn acc node in
     (* loop over the edges *)
-    List.fold_left (fun acc' node' ->
+    List.fold_left (fun acc' {node=node';_} ->
       match m_last_id with
       (* don't go back to where we came from *)
       | Some last_id when node'.id = last_id -> acc'
@@ -51,8 +58,8 @@ let parse_clique_tree file =
         begin try
           let x_node = Hashtbl.find node_tbl x in
           let y_node = Hashtbl.find node_tbl y in
-          x_node.edges <- y_node::x_node.edges;
-          y_node.edges <- x_node::y_node.edges;
+          x_node.edges <- {node=y_node; sepset=[||]; cpd=empty_cpd}::x_node.edges;
+          y_node.edges <- {node=x_node; sepset=[||]; cpd=empty_cpd}::y_node.edges;
         with Not_found -> failwith @: "Can't find "^x^" or "^y^" in hash table" end
     | _ -> failwith "Bad split"
   ) edge_lines;
