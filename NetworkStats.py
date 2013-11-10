@@ -47,7 +47,7 @@ class NetworkStats:
       # remove timestep from landmark name
       landmarkName = varName.split("_")
       landmarkName = landmarkName[:-1]
-      landmarkName = ''.join(landmarkName)
+      landmarkName = '_'.join(landmarkName)
       if landmarkName not in self.landmarkDict:
         self.landmarkDict[landmarkName] = {}
         self.landmarkList.append(landmarkName)
