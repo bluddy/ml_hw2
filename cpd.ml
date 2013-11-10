@@ -142,10 +142,16 @@ let intersect vars1 vars2 =
   in 
   acc_idx1, acc_idx2, acc_other1, acc_other2
 
+(* check that one array is a subset of another *)
+let subset vars1 vars2 =
+  let _, _, l, _ = intersect vars1 vars2 in
+  null l
+
 (* condition a variable to be a certain value and retain the rest of the cpd *)
 (* returns a hashtable on the conditioned variables *)
 let condition cpd_data idxs_keys idxs_keys_len : (string array, cpd_line list) Hashtbl.t =
   let h = Hashtbl.create 10 in
+  match cpd_data with [] -> h | _ ->
   let len_vars = 
     let vars, p = hd cpd_data in
     Array.length vars
@@ -176,6 +182,10 @@ let concat_vars l_vars =
     
 (* get the join-based product of 2 cpds *)
 let product cpd1 cpd2 =
+  match cpd1, cpd2 with
+  | c, _ when c.data = [] -> cpd2
+  | _, c when c.data = [] -> cpd1
+  | _, _ ->
   let idxs1, idxs2, diff_idxs1, diff_idxs2  = intersect cpd1.vars cpd2.vars in
   let l_common_idxs = List.length idxs1 in
   let l_diff_idxs1 = List.length diff_idxs1 in
@@ -247,6 +257,15 @@ let test_cpd' = {vars=[|"c";"b"|];
                 ]
                 }
 
+let test_cpd'' = {vars=[|"c";"d"|]; 
+                data=[
+                  [|"0";"0"|], 0.3;
+                  [|"1";"0"|], 0.6;
+                  [|"0";"1"|], 0.7;
+                  [|"1";"1"|], 0.;
+                ]
+                }
+
 let condition_test () = condition test_cpd.data [1] 1
   
 let product_test () = product test_cpd test_cpd'
@@ -276,6 +295,7 @@ let test_cpd2' = {vars=[|"c";"d";"b"|];
                   [|"1";"1";"1"|], 0.0;
                 ]
                 }
+
   
 let condition_test2 () = 
   let h = condition test_cpd2.data [0;2] 2 in
@@ -285,6 +305,8 @@ let condition_test2 () =
   Hashtbl.find h [|"1";"1"|]
   
 let product_test2 () = product test_cpd2 test_cpd2'
+
+let product_test3 () = product test_cpd test_cpd''
 
 let div_test () = div test_cpd2 test_cpd'
 
