@@ -1,5 +1,5 @@
 open Util
-open Clique_tree
+open CliqueTree
 open Cpd
 
 type actions = Print_Tree
@@ -49,12 +49,12 @@ let run () =
   match params.action with
   | Print_CPDs -> print_endline @: string_of_cpd_list cpd_list
   | Print_Tree -> print_endline @: string_of_tree tree
-  | _          -> failwith "NA"
+  | Inference  -> ignore @: tree_fill_cpds tree cpd_list
 
 let _ = 
   if !Sys.interactive then ()
   else
-    parse_cmd_line ();
-    run ();
+    (parse_cmd_line ();
+    run ();)
 
 
