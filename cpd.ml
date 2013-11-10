@@ -6,7 +6,7 @@ type cpd = {vars:string array;
             data:cpd_line list;
            }
 
-let empty_cpd = {vars=[||]; data=[]}
+let empty_cpd () = {vars=[||]; data=[]}
 
 let string_of_cpd {vars; data} : string =
   let vars = Array.to_list vars in

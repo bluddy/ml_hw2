@@ -45,6 +45,7 @@ let parse_cmd_line () =
 
 let run () = 
   let tree = parse_clique_tree params.cliquetree_file in
+  set_tree_sepsets tree;
   let cpd_list = parse_cpd params.cpd_file in
   let tree = tree_fill_cpds tree cpd_list in
   match params.action with
