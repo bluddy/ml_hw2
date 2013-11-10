@@ -1,5 +1,5 @@
 #!/usr/bin/python
-
+import sys
 from NetworkStats import NetworkStats
 
 if len(sys.argv) < 3:
