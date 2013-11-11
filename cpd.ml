@@ -51,7 +51,8 @@ let parse_cpd file =
     (* get prob value *)
     let p = float_of_string @: at elems 2 in
     let key = Array.of_list @: var_name::dep_names in
-    let cpd_line = Array.of_list(var_val::dep_vals), p in
+    (* convert to log space already here *)
+    let cpd_line = Array.of_list(var_val::dep_vals), log p in
     let cpd = try Hashtbl.find h key 
               with Not_found -> {vars=key; data=[]} (* create a new cpd *)
     in
@@ -96,6 +97,20 @@ let invert_idxs idxs count =
     ([],0) 
     count
 
+let cpd_to_log cpd =
+  let data = List.rev_map (fun (v,p) -> (v, log p)) cpd.data in
+  {vars=cpd.vars; data}
+
+let max_cpd_p {vars; data} =
+  List.fold_left (fun max (_,p) -> if p > max then p else max) 
+    (snd @: hd data) 
+    (tl data)
+
+let cpd_from_log cpd =
+  let max = max_cpd_p cpd in
+  let data = List.rev_map (fun (v,p) -> v, exp @: p -. max) cpd.data in
+  {vars=cpd.vars; data}
+
 (* note: could work straight on indices *)
 let marginalize cpd idxs =
   let var_len = Array.length cpd.vars in
@@ -104,18 +119,19 @@ let marginalize cpd idxs =
   let var_names = take_idxs remain_idxs remain_len cpd.vars in
   (* handle data *)
   let h = Hashtbl.create 10 in
+  let cpd_real = cpd_from_log cpd in
   List.iter (fun (var_vals, p) ->
     let shrunk_vars = take_idxs remain_idxs remain_len var_vals in
     (* check for shrunk vars in hashtable *)
     try 
       (* if we have them, update the probability *)
-      let p' = Hashtbl.find h shrunk_vars in
-      Hashtbl.replace h shrunk_vars @: p +. p'
+      let saved_p = Hashtbl.find h shrunk_vars in
+      Hashtbl.replace h shrunk_vars @: p +. saved_p
     with Not_found -> (* instantiate *)
-      Hashtbl.add h shrunk_vars p
-  ) cpd.data;
+      Hashtbl.add h shrunk_vars @: p
+  ) cpd_real.data;
   (* get back whole cpd *)
-  let data = Hashtbl.fold (fun vars p acc -> (vars, p)::acc) h [] in
+  let data = Hashtbl.fold (fun vars p acc -> (vars, log p)::acc) h [] in
   {vars=var_names; data}
 
 (* filter a cpd by adding evidence, setting a var to a value *)
@@ -192,6 +208,7 @@ let concat_vars l_vars =
   new_arr
     
 (* get the join-based product of 2 cpds *)
+(* we really use addition since the cpd is in log space *)
 let product cpd1 cpd2 =
   match cpd1, cpd2 with
   | c, _ when c.data = [] -> cpd2
@@ -214,7 +231,7 @@ let product cpd1 cpd2 =
       let cross_product =
         List.fold_left (fun acc (vals1, p1) ->
           List.fold_left (fun acc' (vals2, p2) ->
-            (concat_vars [keys;vals1;vals2], p1 *. p2)::acc'
+            (concat_vars [keys;vals1;vals2], p1 +. p2)::acc'
           ) acc cpd2_d
         ) [] cpd1_d
       in
@@ -240,19 +257,20 @@ let div cpd1 cpd2 =
         let _, p2 = try hd @: Hashtbl.find cpd2_c_hash keys
                     with Not_found -> failwith @: "div: missing value" in
         let div = match p1, p2 with
-          | 0., 0. -> 0.
-          | _,  0. -> failwith "div: divide by 0"
-          | _,  _  -> p1 /. p2
+          (*| 0., 0. -> 0.*)
+          (*| _,  0. -> failwith "div: divide by 0"*)
+          | _,  _  -> p1 -. p2 (* we're in log space *)
         in
         vars, div)
      cpd1.data
   in
   {cpd1 with data=new_data}
 
-let normalize cpd =
-  let total_p = List.fold_left (fun acc_p (_,p) -> acc_p +. p) 0. cpd.data in
+let normalize_and_real cpd =
+  let cpd_real = cpd_from_log cpd in
+  let total_p = List.fold_left (fun acc_p (_,p) -> acc_p +. p) 0. cpd_real.data in
   let data' =
-    List.fold_left (fun acc (data,p) -> (data, p /. total_p)::acc) [] cpd.data
+    List.fold_left (fun acc (data,p) -> (data, p /. total_p)::acc) [] cpd_real.data
   in
   {cpd with data=data'}
 
