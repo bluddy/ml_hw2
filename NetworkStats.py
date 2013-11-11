@@ -67,7 +67,7 @@ class NetworkStats:
       actionClique = ["PositionRow"+at_t,"PositionCol"+at_t,"Action"+at_t,"PositionRow"+at_tp1,"PositionCol"+at_tp1]
       # final timestep check:
       if t == self.numActions - 1:
-        actionClique = actionClique[:-2]
+        actionClique = actionClique[:-3]
       print >> f, listToStr(actionClique)
     # generate edges
     for t in xrange(self.numActions):
@@ -79,9 +79,9 @@ class NetworkStats:
       actionClique = ["PositionRow"+at_t,"PositionCol"+at_t,"Action"+at_t,"PositionRow"+at_tp1,"PositionCol"+at_tp1]
       nextActionClique = ["PositionRow"+at_tp1,"PositionCol"+at_tp1,"Action"+at_tp1,"PositionRow"+at_tp2,"PositionCol"+at_tp2]
       if t == self.numActions -2:
-        nextActionClique = nextActionClique[:-2]
+        nextActionClique = nextActionClique[:-3]
       if t == self.numActions -1:
-        actionClique = actionClique[:-2]
+        actionClique = actionClique[:-3]
       for clique in obsCliques:
         s1 = listToStr(clique)
         s2 = listToStr(actionClique)
