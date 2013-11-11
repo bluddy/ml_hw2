@@ -177,6 +177,7 @@ let downstream tree =
   loop @: Queue.pop q
 
 let upstream tree =
+  let root = fst tree in
   let leaves = find_leaves tree in
   let q = Queue.create () in
   List.iter (fun n -> Queue.add n q) leaves;
@@ -192,7 +193,8 @@ let upstream tree =
     in
     if acc_nomsg = 1 then 
       (send_msg tree node1 dest_node;
-      Queue.add dest_node q);
+      (* don't add root so we never execute in upstream *)
+      if dest_node.id <> root.id then Queue.add dest_node q else ());
     try loop @: Queue.pop q with Queue.Empty -> ()
   in
   loop @: Queue.pop q
