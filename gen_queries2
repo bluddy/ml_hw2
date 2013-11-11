@@ -1,0 +1,1 @@
+python gen_queries2.py hw2-files/evidence-q2-grid25x25-t100.txt generated/q2.txt
