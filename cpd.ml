@@ -69,6 +69,14 @@ let cpd_find_idxs cpd (var_names:string list) =
     []
     var_names
 
+let cpd_find_idxs_arr cpd (var_names:string array) = 
+  let h = Hashtbl.create 10 in
+  Array.iteri (fun i var -> Hashtbl.add h var i) cpd.vars;
+  Array.fold_left (fun acc var ->
+    Hashtbl.find h var::acc)
+    []
+    var_names
+
 let take_idxs take_idxs len_take xs =
   let take = Array.make len_take "" in
   let _ = List.fold_left (fun cnt i ->

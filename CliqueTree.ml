@@ -24,6 +24,7 @@ let lookup_edge ((_,h) : tree) (node1, node2) =
   Hashtbl.find h key
 
 let string_of_string_array ss = String.concat ", " (Array.to_list ss)
+let string_of_int_list is = String.concat ", " @: List.map soi is
 
 let modify_edge ((_,h) : tree) (node1, node2) f =
   let key = if node1.id > node2.id 
@@ -146,8 +147,23 @@ let find_leaves ((root,_) as tree) = tree_fold (fun acc node ->
 (* send a msg from node1 to node2 *)
 let send_msg tree node1 node2 =
   let edge = lookup_edge tree (node1, node2) in
-  let _, _, var_idxs, _ = intersect node1.scope edge.sepset in
-  let msg = marginalize node1.node_cpd var_idxs in
+  (* get the indices of the difference between the scope and the sepset *)
+  let _, _, scope_idxs, _ = intersect node1.scope edge.sepset in
+  let var_set = take_idxs scope_idxs (List.length scope_idxs) node1.scope in
+  let cpd_idxs = try cpd_find_idxs_arr node1.node_cpd var_set 
+                 with Not_found -> let s = 
+                   Printf.sprintf "Node %d scope is %s but cpd is %s. Missing vars." node1.id 
+                    (string_of_string_array node1.scope)
+                    (string_of_string_array node1.node_cpd.vars) in
+                   failwith s
+  in
+  (* debug *)
+  (*Printf.printf "Node %d scope: %s\nEdge sepset: %s\nDiff: %s\n"*)
+    (*node1.id (string_of_string_array node1.scope) (string_of_string_array edge.sepset)*)
+    (*(string_of_string_array @: var_set);*)
+  (*Printf.printf "Node %d cpd:\n%s\n" node1.id (string_of_cpd node1.node_cpd);*)
+
+  let msg = marginalize node1.node_cpd cpd_idxs in
   let msg = div msg edge.edge_cpd in
   edge.edge_cpd    <- msg;
   edge.msg_waiting <- node2.id::edge.msg_waiting;
