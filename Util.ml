@@ -113,10 +113,11 @@ let rec foldl_until f acc = function
 let read_file_lines file =
   let in_chan = open_in file in
   let rec read_lines acc =
-      try
-        let acc' = input_line in_chan :: acc
-        in read_lines acc'
-      with End_of_file -> acc in
+    let input = try Some(input_line in_chan) with End_of_file -> None in
+    match input with
+    | None   -> acc
+    | Some x -> read_lines (x::acc)
+  in
   let ls = List.rev @: read_lines [] in
   close_in in_chan; ls
 
