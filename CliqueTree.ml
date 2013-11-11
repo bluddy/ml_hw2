@@ -145,7 +145,7 @@ let find_leaves ((root,_) as tree) = tree_fold (fun acc node ->
   ) [] tree
 
 (* send a msg from node1 to node2 *)
-let send_msg tree node1 node2 =
+let send_msg ?(print_send=false) tree node1 node2 =
   let edge = lookup_edge tree (node1, node2) in
   (* get the indices of the difference between the scope and the sepset *)
   let _, _, scope_idxs, _ = intersect node1.scope edge.sepset in
@@ -158,18 +158,26 @@ let send_msg tree node1 node2 =
                    failwith s
   in
   (* debug *)
-  (*Printf.printf "Node %d scope: %s\nEdge sepset: %s\nDiff: %s\n"*)
-    (*node1.id (string_of_string_array node1.scope) (string_of_string_array edge.sepset)*)
-    (*(string_of_string_array @: var_set);*)
-  (*Printf.printf "Node %d cpd:\n%s\n" node1.id (string_of_cpd node1.node_cpd);*)
-
+  if print_send then
+    (Printf.printf "Node %d scope: %s\nEdge sepset: %s\nDiff: %s\n"
+      node1.id (string_of_string_array node1.scope) (string_of_string_array edge.sepset)
+      (string_of_string_array @: var_set);
+    Printf.printf "Node %d cpd:\n%s\n" node1.id (string_of_cpd node1.node_cpd));
   let msg = marginalize node1.node_cpd cpd_idxs in
+  if print_send then
+    Printf.printf "Node %d marginalized cpd:\n%s\n" node1.id (string_of_cpd msg); (* debug *)
   let msg = div msg edge.edge_cpd in
+  if print_send then
+    Printf.printf "Node %d divided msg:\n%s\n" node1.id (string_of_cpd msg); (* debug *)
   edge.edge_cpd    <- msg;
   edge.msg_waiting <- node2.id::edge.msg_waiting;
-  node2.node_cpd <- product node2.node_cpd msg
+  if print_send then
+    Printf.printf "Node %d pre-product cpd:\n%s\n" node2.id (string_of_cpd node2.node_cpd); (* debug *)
+  node2.node_cpd <- product node2.node_cpd msg;
+  if print_send then
+    Printf.printf "Node %d post-product cpd:\n%s\n" node2.id (string_of_cpd node2.node_cpd) (* debug *)
 
-let downstream tree =
+let downstream ?print_send tree =
   let root = fst tree in
   let q = Queue.create () in
   Queue.add root q;
@@ -179,7 +187,7 @@ let downstream tree =
         let edge = lookup_edge tree (node1, node2) in
         (* send a msg *)
         if not @: List.mem node2.id edge.msg_waiting then
-          (send_msg tree node1 node2;
+          (send_msg ?print_send tree node1 node2;
            Queue.add node2 q);
         (* make sure we received all msgs *)
         let my_msg = List.mem node1.id edge.msg_waiting in
@@ -192,25 +200,27 @@ let downstream tree =
   in
   loop @: Queue.pop q
 
-let upstream tree =
+let upstream ?print_send tree =
   let root = fst tree in
   let leaves = find_leaves tree in
   let q = Queue.create () in
   List.iter (fun n -> Queue.add n q) leaves;
   let rec loop node1 =
-    let dest_node, acc_nomsg =
-      List.fold_left (fun (acc_node, acc_nomsg) node2 ->
+    let dest_node, acc_nomsg, already_sent =
+      List.fold_left (fun (acc_node, acc_nomsg, acc_sent) node2 ->
           let edge = lookup_edge tree (node1, node2) in
           let msg = List.mem node1.id edge.msg_waiting in
-          if not msg then (node2, acc_nomsg + 1)
-          else acc_node, acc_nomsg) 
-        (node1, 0) 
+          let already_sent = List.mem node2.id edge.msg_waiting in
+          if not msg then (node2, acc_nomsg + 1, already_sent)
+          else acc_node, acc_nomsg, acc_sent) 
+        (node1, 0, false) 
         node1.edges
     in
-    if acc_nomsg = 1 then 
-      (send_msg tree node1 dest_node;
+    if acc_nomsg = 1 && not already_sent then 
+      (send_msg ?print_send tree node1 dest_node;
       (* don't add root so we never execute in upstream *)
       if dest_node.id <> root.id then Queue.add dest_node q else ());
     try loop @: Queue.pop q with Queue.Empty -> ()
   in
   loop @: Queue.pop q
+

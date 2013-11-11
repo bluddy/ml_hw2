@@ -12,6 +12,8 @@ type params_t = {
   mutable cpd_file: string;
   mutable cliquetree_file: string;
   mutable queries_file: string;
+  mutable debug_send: bool;
+  mutable print_tree: bool;
 }
 
 let params = {
@@ -20,15 +22,21 @@ let params = {
   cpd_file="";
   cliquetree_file="";
   queries_file="";
+  debug_send=false;
+  print_tree=false;
 }
 
 let parse_cmd_line () =
   let files = ref [] in
   let param_specs = Arg.align
    ["--print_cpds", Arg.Unit (fun () -> params.action <- Print_CPDs),
-     "Print the CPDs";
-    "--print_tree", Arg.Unit (fun () -> params.action <- Print_Tree),
-     "Print the clique tree";
+     "Only print the CPDs";
+    "--print_init_tree", Arg.Unit (fun () -> params.action <- Print_Tree),
+     "Only print the initialized clique tree";
+    "--print_tree", Arg.Unit (fun () -> params.print_tree <- true),
+     "Print the final clique tree";
+    "--debug_send", Arg.Unit (fun () -> params.debug_send <- true),
+     "Debug: print send_msg information";
    ]
   in
   Arg.parse param_specs
@@ -54,9 +62,11 @@ let run () =
   | Print_CPDs -> print_endline @: string_of_cpd_list cpd_list
   | Print_Tree -> print_tree tree
   | Inference  -> 
-      upstream tree;
-      downstream tree;
-      print_tree tree
+      upstream tree ~print_send:params.debug_send;
+      if params.debug_send then print_endline "Downstream...";
+      downstream tree ~print_send:params.debug_send;
+      if params.debug_send then print_endline "Tree:";
+      if params.print_tree then print_tree tree else ()
 
 let _ = 
   if !Sys.interactive then ()
