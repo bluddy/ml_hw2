@@ -55,9 +55,13 @@ let print_tree tree = print_endline @: string_of_tree tree
 
 let run () = 
   let tree = parse_clique_tree params.cliquetree_file in
+  (*print_endline "parsed clique tree";*)
   set_tree_sepsets tree;
+  (*print_endline "set sepsets";*)
   let cpd_list = parse_cpd params.cpd_file in
+  (*print_endline "parsed cpds";*)
   let tree = tree_fill_cpds tree cpd_list in
+  (*print_endline "filled tree with cpds";*)
   match params.action with
   | Print_CPDs -> print_endline @: string_of_cpd_list cpd_list
   | Print_Tree -> print_tree tree

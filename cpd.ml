@@ -3,7 +3,7 @@ open Util
 type cpd_line = string array * float
 
 type cpd = {vars:string array;
-            data:cpd_line list;
+            mutable data:cpd_line list;
            }
 
 let empty_cpd () = {vars=[||]; data=[]}
@@ -38,14 +38,19 @@ let parse_cpd file =
   let f = read_file file in
   let lines = lines f in
   let h = Hashtbl.create 10 in
+  let i = ref 1 in
   (* accumulate cpds *)
   List.iter (fun line ->
+    print_endline @: soi !i;
+    i := !i + 1;
     let elems = r_split " " line in
     let var_name, var_val = get_key_val @: hd elems in
     (* get dependencies *)
     let dep_list = r_split "," @: at elems 1 in
-    let dep_names, dep_vals = List.split @: 
-      List.map (fun str -> get_key_val str) dep_list in
+    let dep_names, dep_vals = 
+      List.fold_right (fun str (acc_names, acc_vals) ->
+        let n, v = get_key_val str in
+        n::acc_names, v::acc_vals) dep_list ([],[]) in
     (* get prob value *)
     let p = float_of_string @: at elems 2 in
     let key = Array.of_list @: var_name::dep_names in
@@ -53,8 +58,7 @@ let parse_cpd file =
     let cpd = try Hashtbl.find h key 
               with Not_found -> {vars=key; data=[]} (* create a new cpd *)
     in
-    let cpd' = {cpd with data=cpd_line::cpd.data} in
-    Hashtbl.replace h key cpd'
+    cpd.data <- cpd_line::cpd.data
   ) lines;
   Hashtbl.fold (fun k v acc -> v::acc) h []
 
