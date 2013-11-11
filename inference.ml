@@ -1,6 +1,7 @@
 open Util
 open CliqueTree
 open Cpd
+open Queries
 
 type actions = Print_Tree
              | Print_CPDs
@@ -14,6 +15,7 @@ type params_t = {
   mutable queries_file: string;
   mutable debug_send: bool;
   mutable print_tree: bool;
+  mutable incremental: bool;
 }
 
 let params = {
@@ -24,12 +26,16 @@ let params = {
   queries_file="";
   debug_send=false;
   print_tree=false;
+  incremental=false;
 }
 
 let parse_cmd_line () =
   let files = ref [] in
   let param_specs = Arg.align
-   ["--print_cpds", Arg.Unit (fun () -> params.action <- Print_CPDs),
+   [
+    "--incremental", Arg.Unit (fun () -> params.incremental <- true),
+     "Incremental computation";
+    "--print_cpds", Arg.Unit (fun () -> params.action <- Print_CPDs),
      "Only print the CPDs";
     "--print_init_tree", Arg.Unit (fun () -> params.action <- Print_Tree),
      "Only print the initialized clique tree";
@@ -60,17 +66,24 @@ let run () =
   (*print_endline "set sepsets";*)
   let cpd_list = parse_cpd params.cpd_file in
   (*print_endline "parsed cpds";*)
+  let query_list = parse_queries params.queries_file in
   let tree = tree_fill_cpds tree cpd_list in
   (*print_endline "filled tree with cpds";*)
   match params.action with
   | Print_CPDs -> print_endline @: string_of_cpd_list cpd_list
   | Print_Tree -> print_tree tree
   | Inference  -> 
-      upstream tree ~print_send:params.debug_send;
-      if params.debug_send then print_endline "Downstream...";
-      downstream tree ~print_send:params.debug_send;
-      if params.debug_send then print_endline "Tree:";
-      if params.print_tree then print_tree tree else ()
+      let stream_fn () = 
+        upstream tree ~print_send:params.debug_send;
+        if params.debug_send then print_endline "Downstream...";
+        downstream tree ~print_send:params.debug_send;
+        if params.print_tree then (print_endline "Tree:"; print_tree tree) else ()
+      in
+      stream_fn ();
+      save_node_cpds tree;
+      let answers = process_queries ~incremental:params.incremental stream_fn tree query_list in
+      List.iter (function Some a -> Printf.printf "%.13f\n" a
+                         | None  -> print_endline "error") answers
 
 let _ = 
   if !Sys.interactive then ()

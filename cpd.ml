@@ -3,7 +3,7 @@ open Util
 type cpd_line = string array * float
 
 type cpd = {vars:string array;
-            mutable data:cpd_line list;
+            data:cpd_line list;
            }
 
 let empty_cpd () = {vars=[||]; data=[]}
@@ -119,8 +119,7 @@ let marginalize cpd idxs =
   {vars=var_names; data}
 
 (* filter a cpd by adding evidence, setting a var to a value *)
-let add_evidence cpd var_value_list =
-  let var_list, value_list = List.split var_value_list in
+let add_evidence cpd var_list value_list =
   let idxs = cpd_find_idxs cpd var_list in
   let data = List.filter (fun (var_vals, p) ->
       List.for_all2 (fun idx v -> var_vals.(idx) = v) idxs value_list)
@@ -249,6 +248,14 @@ let div cpd1 cpd2 =
      cpd1.data
   in
   {cpd1 with data=new_data}
+
+let normalize cpd =
+  let total_p = List.fold_left (fun acc_p (_,p) -> acc_p +. p) 0. cpd.data in
+  let data' =
+    List.fold_left (fun acc (data,p) -> (data, p /. total_p)::acc) [] cpd.data
+  in
+  {cpd with data=data'}
+
 
 (* ******* tests *************************************)
 

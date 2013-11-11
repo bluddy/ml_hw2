@@ -11,7 +11,8 @@ type node = {
   id: int;
   scope: string array;
   mutable edges: node list; (* node and whether I received a msg *)
-  mutable node_cpd: cpd
+  mutable node_cpd: cpd;
+  mutable saved_cpd: cpd;
 }
 
 let empty_edge () = {sepset=[||]; edge_cpd=empty_cpd (); msg_waiting=[]}
@@ -22,6 +23,19 @@ let lookup_edge ((_,h) : tree) (node1, node2) =
   let key = if node1.id > node2.id then node2.id, node1.id else node1.id, node2.id
   in
   Hashtbl.find h key
+
+(* reset the cpd and mailboxes of all edges *)
+let reset_edges_all ((_,h) : tree) =
+  Hashtbl.iter (fun _ edge ->
+    edge.edge_cpd <- empty_cpd ();
+    edge.msg_waiting <- []
+  ) h
+
+(* reset the cpd and mailboxes of all edges *)
+let reset_edge_mailboxes ((_,h) : tree) =
+  Hashtbl.iter (fun _ edge ->
+    edge.msg_waiting <- []
+  ) h
 
 let string_of_string_array ss = String.concat ", " (Array.to_list ss)
 let string_of_int_list is = String.concat ", " @: List.map soi is
@@ -80,7 +94,7 @@ let parse_clique_tree file =
   (* add to hashtable *)
   List.iter (fun line ->
       let scope = Array.of_list @: r_split "," line in
-      let new_node = {id=(!count); scope; edges=[]; node_cpd=empty_cpd ()} in
+      let new_node = {id=(!count); scope; edges=[]; node_cpd=empty_cpd (); saved_cpd=empty_cpd ()} in
       Hashtbl.add node_tbl line new_node;
       node_l := new_node::(!node_l);
       count := !count + 1
@@ -223,4 +237,14 @@ let upstream ?print_send tree =
     try loop @: Queue.pop q with Queue.Empty -> ()
   in
   loop @: Queue.pop q
+
+let save_node_cpds tree =
+  tree_fold (fun _ node ->
+    node.saved_cpd <- node.node_cpd; ()
+  ) () tree
+
+let restore_node_cpds tree =
+  tree_fold (fun _ node ->
+    node.node_cpd <- node.saved_cpd; ()
+  ) () tree
 

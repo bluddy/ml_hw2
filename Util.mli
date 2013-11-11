@@ -186,3 +186,5 @@ val r_match : string -> string -> bool
 
 (* --- other stuff ---- *)
 val make_lst : 'a -> int -> 'a list
+
+val diff: 'a list -> 'a list -> 'a list

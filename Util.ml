@@ -387,4 +387,19 @@ let  make_lst element num =
   helper [] num
 
 
+(** 
+   Computes the difference between two sets
+   @param l1 The first list set
+   @param l2 The second list set
+   @return   The difference l1 - l2
+*)
+let diff l1 l2 =
+  let hash = Hashtbl.create (List.length l2) in
+  List.iter (fun x -> Hashtbl.replace hash x ()) l2;
+  List.rev 
+   (List.fold_left (fun acc x ->
+      try 
+        Hashtbl.find hash x; acc 
+      with Not_found -> x::acc
+    ) [] l1)
 
