@@ -86,9 +86,8 @@ let invert_idxs idxs count =
     ([],0) 
     count
 
-let marginalize cpd vars =
-  let idxs = cpd_find_idxs cpd vars in
-  (* handle names *)
+(* note: could work straight on indices *)
+let marginalize cpd idxs =
   let var_len = Array.length cpd.vars in
   let remain_idxs = invert_idxs idxs var_len in
   let remain_len = List.length remain_idxs in
@@ -219,6 +218,7 @@ let product cpd1 cpd2 =
 (* to do division, we loop over the common vars and divide the bigger factor
  * by the smaller one *)
 let div cpd1 cpd2 =
+  if cpd2.data = [] then cpd1 else (* handle the '1' for division *)
   let idxs1, idxs2, diff_idxs1, diff_idxs2 = intersect cpd1.vars cpd2.vars in
   if not @: null diff_idxs2 then failwith "Div: second factor too big" else
   let l_common_idxs = List.length idxs1 in
@@ -313,7 +313,7 @@ let product_test3 () = product test_cpd test_cpd''
 
 let div_test () = div test_cpd2 test_cpd'
 
-let marginalize_test () = marginalize test_cpd2' ["d";"c"]
-let marginalize_test2 () = marginalize test_cpd2' ["c"]
+let marginalize_test () = marginalize test_cpd2' [0;2]
+let marginalize_test2 () = marginalize test_cpd2' [1]
 
 

@@ -3,22 +3,23 @@ open Cpd
 
 type edge = {
   mutable sepset: string array;
-  mutable edge_cpd: cpd
+  mutable edge_cpd: cpd;
+  mutable msg_waiting: int list;
 }
 
 type node = {
   id: int;
   scope: string array;
-  mutable edges: node list;
+  mutable edges: node list; (* node and whether I received a msg *)
   mutable node_cpd: cpd
 }
 
-let empty_edge () = {sepset=[||]; edge_cpd=empty_cpd ()}
+let empty_edge () = {sepset=[||]; edge_cpd=empty_cpd (); msg_waiting=[]}
 
 type tree = node * (int * int, edge) Hashtbl.t 
 
 let lookup_edge ((_,h) : tree) (node1, node2) =
-  let key = if node1 > node2 then node2, node1 else node1, node2
+  let key = if node1.id > node2.id then node2.id, node1.id else node1.id, node2.id
   in
   Hashtbl.find h key
 
@@ -136,3 +137,62 @@ let set_sepset tree node1 =
 let set_tree_sepsets tree = tree_fold 
    (fun _ node -> set_sepset tree node) () tree
 
+let find_leaves ((root,_) as tree) = tree_fold (fun acc node -> 
+    match node.edges with 
+    | [x] when node.id <> root.id -> node::acc
+    | _   -> acc
+  ) [] tree
+
+(* send a msg from node1 to node2 *)
+let send_msg tree node1 node2 =
+  let edge = lookup_edge tree (node1, node2) in
+  let _, _, var_idxs, _ = intersect node1.scope edge.sepset in
+  let msg = marginalize node1.node_cpd var_idxs in
+  let msg = div msg edge.edge_cpd in
+  edge.edge_cpd    <- msg;
+  edge.msg_waiting <- node2.id::edge.msg_waiting;
+  node2.node_cpd <- product node2.node_cpd msg
+
+let downstream tree =
+  let root = fst tree in
+  let q = Queue.create () in
+  Queue.add root q;
+  let rec loop node1 =
+    let acc_nomsg =
+      List.fold_left (fun acc_nomsg node2 ->
+        let edge = lookup_edge tree (node1, node2) in
+        (* send a msg *)
+        if not @: List.mem node2.id edge.msg_waiting then
+          (send_msg tree node1 node2;
+           Queue.add node2 q);
+        (* make sure we received all msgs *)
+        let my_msg = List.mem node1.id edge.msg_waiting in
+        if not my_msg then acc_nomsg + 1 else acc_nomsg
+        ) 0 node1.edges
+    in
+    if acc_nomsg > 0 then 
+      failwith @: "Node "^soi node1.id^"didn't receive all messages!" else
+    try loop @: Queue.pop q with Queue.Empty -> ()
+  in
+  loop @: Queue.pop q
+
+let upstream tree =
+  let leaves = find_leaves tree in
+  let q = Queue.create () in
+  List.iter (fun n -> Queue.add n q) leaves;
+  let rec loop node1 =
+    let dest_node, acc_nomsg =
+      List.fold_left (fun (acc_node, acc_nomsg) node2 ->
+          let edge = lookup_edge tree (node1, node2) in
+          let msg = List.mem node1.id edge.msg_waiting in
+          if not msg then (node2, acc_nomsg + 1)
+          else acc_node, acc_nomsg) 
+        (node1, 0) 
+        node1.edges
+    in
+    if acc_nomsg = 1 then 
+      (send_msg tree node1 dest_node;
+      Queue.add dest_node q);
+    try loop @: Queue.pop q with Queue.Empty -> ()
+  in
+  loop @: Queue.pop q

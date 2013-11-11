@@ -43,6 +43,8 @@ let parse_cmd_line () =
     "Please specify network_file cpd_file cliquetree_file queries_file";
     exit 1
 
+let print_tree tree = print_endline @: string_of_tree tree
+
 let run () = 
   let tree = parse_clique_tree params.cliquetree_file in
   set_tree_sepsets tree;
@@ -50,8 +52,11 @@ let run () =
   let tree = tree_fill_cpds tree cpd_list in
   match params.action with
   | Print_CPDs -> print_endline @: string_of_cpd_list cpd_list
-  | Print_Tree -> print_endline @: string_of_tree tree
-  | Inference  -> failwith "NA"
+  | Print_Tree -> print_tree tree
+  | Inference  -> 
+      upstream tree;
+      downstream tree;
+      print_tree tree
 
 let _ = 
   if !Sys.interactive then ()
