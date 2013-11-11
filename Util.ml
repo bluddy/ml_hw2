@@ -79,7 +79,7 @@ let list_last xs = hd @: list_take_end 1 xs
 (* will only remove one instance of x in xs (as opposed to filter) *)
 let list_remove r l =
   let rec loop acc = function
-    | x::xs when x = r -> (List.rev acc)@xs
+    | x::xs when x = r -> List.rev_append acc xs
     | x::xs -> loop (x::acc) xs
     | []    -> List.rev acc
   in loop [] l
@@ -90,7 +90,7 @@ let list_partition_idxs is xs =
   let rec loop acc_take acc_drop idx is xs = match xs, is with
     | x::xs, i::is when idx = i -> loop acc_take (x::acc_drop) (idx+1) is xs (* don't add *)
     | x::xs, ((i::is) as is')   -> loop (x::acc_take) acc_drop (idx+1) is' xs
-    | xs, []                    -> (List.rev acc_take)@xs, List.rev acc_drop
+    | xs, []                    -> List.rev_append acc_take xs, List.rev acc_drop
     | [],    _                  -> List.rev acc_take, List.rev acc_drop
   in loop [] [] 0 is xs
 

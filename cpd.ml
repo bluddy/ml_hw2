@@ -209,7 +209,7 @@ let product cpd1 cpd2 =
           ) acc cpd2_d
         ) [] cpd1_d
       in
-      cross_product@acc_cpd
+      List.rev_append cross_product acc_cpd
     ) 
     cpd1_c_hash []
   in
