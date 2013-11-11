@@ -188,3 +188,7 @@ val r_match : string -> string -> bool
 val make_lst : 'a -> int -> 'a list
 
 val diff: 'a list -> 'a list -> 'a list
+
+val string_of_string_array : string array -> string
+val string_of_string_list : string list -> string
+val string_of_int_list : int list -> string

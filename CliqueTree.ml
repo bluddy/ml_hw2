@@ -37,9 +37,6 @@ let reset_edge_mailboxes ((_,h) : tree) =
     edge.msg_waiting <- []
   ) h
 
-let string_of_string_array ss = String.concat ", " (Array.to_list ss)
-let string_of_int_list is = String.concat ", " @: List.map soi is
-
 let modify_edge ((_,h) : tree) (node1, node2) f =
   let key = if node1.id > node2.id 
     then node2.id, node1.id 

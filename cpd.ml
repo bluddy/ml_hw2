@@ -8,7 +8,22 @@ type cpd = {vars:string array;
 
 let empty_cpd () = {vars=[||]; data=[]}
 
-let string_of_cpd {vars; data} : string =
+let cpd_to_log cpd =
+  let data = List.rev_map (fun (v,p) -> (v, log p)) cpd.data in
+  {vars=cpd.vars; data}
+
+let max_cpd_p {vars; data} =
+  List.fold_left (fun max (_,p) -> if p > max then p else max) 
+    (snd @: hd data) 
+    (tl data)
+
+let cpd_from_log cpd =
+  let max = max_cpd_p cpd in
+  let data = List.rev_map (fun (v,p) -> v, exp @: p -. max) cpd.data in
+  {vars=cpd.vars; data}
+
+let string_of_cpd cpd : string =
+  let {vars; data} = cpd_from_log cpd in
   let vars = Array.to_list vars in
   let s_list =
     (match vars with 
@@ -97,19 +112,6 @@ let invert_idxs idxs count =
     ([],0) 
     count
 
-let cpd_to_log cpd =
-  let data = List.rev_map (fun (v,p) -> (v, log p)) cpd.data in
-  {vars=cpd.vars; data}
-
-let max_cpd_p {vars; data} =
-  List.fold_left (fun max (_,p) -> if p > max then p else max) 
-    (snd @: hd data) 
-    (tl data)
-
-let cpd_from_log cpd =
-  let max = max_cpd_p cpd in
-  let data = List.rev_map (fun (v,p) -> v, exp @: p -. max) cpd.data in
-  {vars=cpd.vars; data}
 
 (* note: could work straight on indices *)
 let marginalize cpd idxs =
@@ -136,6 +138,7 @@ let marginalize cpd idxs =
 
 (* filter a cpd by adding evidence, setting a var to a value *)
 let add_evidence cpd var_list value_list =
+  print_endline @: "Adding evidence "^(string_of_string_list var_list)^"\n";
   let idxs = cpd_find_idxs cpd var_list in
   let data = List.filter (fun (var_vals, p) ->
       List.for_all2 (fun idx v -> var_vals.(idx) = v) idxs value_list)

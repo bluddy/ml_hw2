@@ -68,20 +68,22 @@ let run () =
   (*print_endline "parsed cpds";*)
   let query_list = parse_queries params.queries_file in
   let tree = tree_fill_cpds tree cpd_list in
+  save_node_cpds tree;
   (*print_endline "filled tree with cpds";*)
   match params.action with
   | Print_CPDs -> print_endline @: string_of_cpd_list cpd_list
   | Print_Tree -> print_tree tree
   | Inference  -> 
-      let stream_fn () = 
+      let stream_fn tree = 
         upstream tree ~print_send:params.debug_send;
         if params.debug_send then print_endline "Downstream...";
         downstream tree ~print_send:params.debug_send;
         if params.print_tree then (print_endline "Tree:"; print_tree tree) else ()
       in
-      stream_fn ();
-      save_node_cpds tree;
-      let answers = process_queries ~incremental:params.incremental stream_fn tree query_list in
+      stream_fn tree;
+      let answers = 
+        if params.debug_send then print_endline "\nWith evidence:";
+        process_queries ~incremental:params.incremental stream_fn tree query_list in
       List.iter (function Some a -> Printf.printf "%.13f\n" a
                          | None  -> print_endline "error") answers
 

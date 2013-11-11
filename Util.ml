@@ -403,3 +403,6 @@ let diff l1 l2 =
       with Not_found -> x::acc
     ) [] l1)
 
+let string_of_string_array ss = String.concat ", " (Array.to_list ss)
+let string_of_string_list ss = String.concat ", " ss
+let string_of_int_list is = String.concat ", " @: List.map soi is

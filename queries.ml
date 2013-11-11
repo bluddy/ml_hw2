@@ -46,6 +46,7 @@ let apply_evidence tree given =
       ([],[])
       node.node_cpd.vars
     in
+    Printf.printf "Adding evidence to node %d\n" node.id;
     node.node_cpd <- add_evidence node.node_cpd add_vars add_vals;
     ()
   ) () tree
@@ -78,7 +79,7 @@ let process_queries ~incremental stream_fn tree q_list =
         let delta_given = diff q.given last_q.given in
         reset_edge_mailboxes tree;
         apply_evidence tree delta_given;
-        stream_fn ();
+        stream_fn tree;
         let answer = find_answer tree q.p_of in
         (answer::acc_answers, Some q)
 
@@ -86,7 +87,7 @@ let process_queries ~incremental stream_fn tree q_list =
         reset_edges_all tree;
         restore_node_cpds tree;
         apply_evidence tree q.given;
-        stream_fn ();
+        stream_fn tree;
         let answer = find_answer tree q.p_of in
         (answer::acc_answers, Some q)
     ) 
