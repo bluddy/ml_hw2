@@ -74,22 +74,33 @@ let find_answer tree query =
 let process_queries ~incremental stream_fn tree q_list =
   let answers = List.rev @: fst @:
     List.fold_left (fun (acc_answers, m_last_q) q ->
-      match incremental, m_last_q with
-      | true, Some last_q when diff last_q.given q.given = [] ->
-        let delta_given = diff q.given last_q.given in
-        reset_edge_mailboxes tree;
-        apply_evidence tree delta_given;
-        stream_fn tree;
-        let answer = find_answer tree q.p_of in
-        (answer::acc_answers, Some q)
-
-      | _, _ -> (* retractive. we must reset the tree *)
+      let retractive () =
         reset_edges_all tree;
         restore_node_cpds tree;
         apply_evidence tree q.given;
         stream_fn tree;
         let answer = find_answer tree q.p_of in
         (answer::acc_answers, Some q)
+      in
+      match m_last_q with
+      | Some last_q ->
+          let d1 = diff last_q.given q.given = [] in
+          let d2 = diff q.given last_q.given = [] in
+          if d1 && d2 then (* repeat from last *)
+            let answer = find_answer tree q.p_of in
+            (answer::acc_answers, Some q)
+          else if d1 && incremental then
+            let delta_given = diff q.given last_q.given in
+            reset_edge_mailboxes tree;
+            apply_evidence tree delta_given;
+            stream_fn tree;
+            let answer = find_answer tree q.p_of in
+            (answer::acc_answers, Some q)
+          else (* retractive *)
+            retractive ()
+
+      | _ -> retractive () (* retractive. we must reset the tree *)
+
     ) 
     ([], None)
     q_list
