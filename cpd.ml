@@ -38,11 +38,8 @@ let parse_cpd file =
   let f = read_file file in
   let lines = lines f in
   let h = Hashtbl.create 10 in
-  let i = ref 1 in
   (* accumulate cpds *)
   List.iter (fun line ->
-    print_endline @: soi !i;
-    i := !i + 1;
     let elems = r_split " " line in
     let var_name, var_val = get_key_val @: hd elems in
     (* get dependencies *)
@@ -58,7 +55,8 @@ let parse_cpd file =
     let cpd = try Hashtbl.find h key 
               with Not_found -> {vars=key; data=[]} (* create a new cpd *)
     in
-    cpd.data <- cpd_line::cpd.data
+    let cpd' = {cpd with data = cpd_line::cpd.data} in
+    Hashtbl.replace h key cpd'
   ) lines;
   Hashtbl.fold (fun k v acc -> v::acc) h []
 
