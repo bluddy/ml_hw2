@@ -138,7 +138,7 @@ let marginalize cpd idxs =
 
 (* filter a cpd by adding evidence, setting a var to a value *)
 let add_evidence cpd var_list value_list =
-  print_endline @: "Adding evidence "^(string_of_string_list var_list)^"\n";
+  (*print_endline @: "Adding evidence "^(string_of_string_list var_list)^"\n";*)
   let idxs = cpd_find_idxs cpd var_list in
   let data = List.filter (fun (var_vals, p) ->
       List.for_all2 (fun idx v -> var_vals.(idx) = v) idxs value_list)

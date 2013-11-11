@@ -46,7 +46,7 @@ let apply_evidence tree given =
       ([],[])
       node.node_cpd.vars
     in
-    Printf.printf "Adding evidence to node %d\n" node.id;
+    (*Printf.printf "Adding evidence to node %d\n" node.id;*)
     node.node_cpd <- add_evidence node.node_cpd add_vars add_vals;
     ()
   ) () tree
