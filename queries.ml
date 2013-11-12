@@ -125,13 +125,16 @@ let process_queries_max stream_fn tree q_list : (float * assign list) list =
     in
     stream_fn tree root; (* upstream only *)
     let _, node_idxs, _, diff_idxs = 
-      intersect q_vars_arr root.node_cpd.backptrs in
+      intersect q_vars_arr root.node_cpd.vars in
     let cpd = root.node_cpd in
     let cpd = normalize_and_real cpd in
-    let cpd = marginalize_max cpd diff_idxs in
+    let cpd = marginalize_max cpd @: node_idxs@diff_idxs in
+    Printf.printf "\nfinal root:\n %s\n" @: string_of_cpd cpd;
     if List.length cpd.data <> 1 then 
-      failwith "data hasn't reduced to 1 line";
+      print_endline "data hasn't reduced to 1 line";
     let _, p, back_vals = hd cpd.data in
+    let _, node_idxs, _, _ = 
+      intersect q_vars_arr root.node_cpd.backptrs in
     let l = List.length node_idxs in
     let wanted_vals = Array.to_list @: 
       take_idxs node_idxs l back_vals in

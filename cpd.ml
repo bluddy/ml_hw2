@@ -14,12 +14,13 @@ let cpd_to_log cpd =
   let data = List.rev_map (fun (v,p,back) -> v, log p, back) cpd.data in
   {cpd with data}
 
-let max_cpd_p cpd =
-  List.fold_left (fun max (_,p,_) -> if p > max then p else max) 
-    (let _,p,_ = hd cpd.data in p) 
-    (tl cpd.data)
+let max_cpd_p cpd = match cpd.data with [_,p,_] -> p 
+  | _ -> List.fold_left (fun max (_,p,_) -> if p > max then p else max) 
+          (let _,p,_ = hd cpd.data in p) 
+          (tl cpd.data)
 
 let cpd_from_log cpd =
+  match cpd.data with [] -> cpd | _ ->
   let max = max_cpd_p cpd in
   let data = List.rev_map (fun (v,p,b) -> v, exp @: p -. max,b) cpd.data in
   {cpd with data}
@@ -28,29 +29,36 @@ let string_of_cpd cpd : string =
   let {vars; backptrs; data} = cpd_from_log cpd in
   let vars = Array.to_list vars in
   let backptrs = Array.to_list backptrs in
-  let s_list =
-    (match vars with 
+    ((match vars with 
      | []  -> "!!! Empty vars !!!"
      | [x] -> x
-     | _   ->
-      Printf.sprintf "%s | " (hd vars)^
-      String.concat ", " @: tl vars)::
-    (match backptrs with
+     | _   -> String.concat ", " vars)^
+     (match backptrs with
      | []  -> ""
-     | _   -> "backptrs: "^
-      String.concat ", " @: backptrs)::
-    "data:"::
-    List.map (fun (deps, p, back) ->
-      let deps_s = string_of_string_array deps in
-      (Printf.sprintf "%s -> %f" deps_s p)^
-      match back with [||] -> ""
-                    | _    -> ": "^string_of_string_array back
-    ) data
-  in
-  String.concat "\n" s_list
+     | _   -> ": "^String.concat ", " @: backptrs)^
+    "\ndata:\n")^
+    String.concat "\n" @: 
+      List.map (fun (deps, p, back) ->
+        let deps_s = string_of_string_array deps in
+        (Printf.sprintf "%s -> %f" deps_s p)^
+        match back with [||] -> ""
+                      | _    -> ": "^string_of_string_array back
+      ) data
 
 let string_of_cpd_list cs : string = 
   String.concat "\n\n" @: List.map string_of_cpd cs
+
+(* concatenate arrays of strings into one array *)
+let concat_vars l_vars =
+  let len = List.fold_left (fun acc arr -> acc + Array.length arr)
+    0 l_vars in
+  let new_arr = Array.create len "" in
+  let _ = List.fold_left (fun acc_len arr ->
+    let arr_len = Array.length arr in
+    Array.blit arr 0 new_arr acc_len arr_len;
+    acc_len + arr_len
+  ) 0 l_vars in
+  new_arr
 
 let parse_cpd file =
   (* parse key=val *)
@@ -141,30 +149,34 @@ let marginalize cpd idxs =
   let data = Hashtbl.fold (fun vars p acc -> (vars, log p, [||])::acc) h [] in
   {cpd with vars=var_names; data}
 
-(* note: could work straight on indices *)
 let marginalize_max cpd idxs =
   let var_len = Array.length cpd.vars in
   let remain_idxs = invert_idxs idxs var_len in
   let remain_len = List.length remain_idxs in
   let var_names = take_idxs remain_idxs remain_len cpd.vars in
+  let new_backptrs = take_idxs idxs (var_len-remain_len) cpd.vars in
+  let backptrs = concat_vars [cpd.backptrs; new_backptrs] in
   (* handle data *)
   let h = Hashtbl.create 10 in
-  List.iter (fun (var_vals, p, back_vals) ->
+  List.iter (fun (var_vals, p, old_back_vals) ->
     let shrunk_vars = take_idxs remain_idxs remain_len var_vals in
+    (* take care of backpointers *)
+    let new_back_vals = take_idxs idxs (var_len-remain_len) var_vals in
+    let mixed_back_vals = concat_vars [old_back_vals; new_back_vals] in
     (* check for shrunk vars in hashtable *)
     try 
       (* if we have them, update the probability *)
       let saved_p, _ = Hashtbl.find h shrunk_vars in
       if p > saved_p then
-        Hashtbl.replace h shrunk_vars (p, back_vals);
+        Hashtbl.replace h shrunk_vars (p, mixed_back_vals);
     with Not_found -> (* instantiate *)
-      Hashtbl.add h shrunk_vars (p, back_vals)
+      Hashtbl.add h shrunk_vars (p, mixed_back_vals)
   ) cpd.data;
   (* get back whole cpd *)
   let data = Hashtbl.fold (fun vars (p,back_vals) acc -> 
       (vars, p, back_vals)::acc) 
     h [] in
-  {cpd with vars=var_names; data}
+  {vars=var_names; data; backptrs}
 
 (* filter a cpd by adding evidence, setting a var to a value *)
 let add_evidence cpd var_list value_list =
@@ -228,18 +240,6 @@ let condition cpd_data idxs_keys idxs_keys_len : (string array, cpd_line list) H
   ) cpd_data;
   h
 
-(* concatenate arrays of strings into one array *)
-let concat_vars l_vars =
-  let len = List.fold_left (fun acc arr -> acc + Array.length arr)
-    0 l_vars in
-  let new_arr = Array.create len "" in
-  let _ = List.fold_left (fun acc_len arr ->
-    let arr_len = Array.length arr in
-    Array.blit arr 0 new_arr acc_len arr_len;
-    acc_len + arr_len
-  ) 0 l_vars in
-  new_arr
-    
 (* get the join-based product of 2 cpds *)
 (* we really use addition since the cpd is in log space *)
 (* for backpointers, we don't need to worry about having the same varname because
