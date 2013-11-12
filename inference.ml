@@ -2,6 +2,7 @@ open Util
 open CliqueTree
 open Cpd
 open Queries
+open Unix
 
 type actions = Print_Tree
              | Print_CPDs
@@ -16,6 +17,7 @@ type params_t = {
   mutable debug_send: bool;
   mutable print_tree: bool;
   mutable incremental: bool;
+  mutable time: bool;
 }
 
 let params = {
@@ -27,6 +29,7 @@ let params = {
   debug_send=false;
   print_tree=false;
   incremental=false;
+  time=false;
 }
 
 let parse_cmd_line () =
@@ -43,6 +46,8 @@ let parse_cmd_line () =
      "Print the final clique tree";
     "--debug_send", Arg.Unit (fun () -> params.debug_send <- true),
      "Debug: print send_msg information";
+    "--time", Arg.Unit (fun () -> params.time <- true),
+     "Test time of algorithm";
    ]
   in
   Arg.parse param_specs
@@ -74,6 +79,7 @@ let run () =
   | Print_CPDs -> print_endline @: string_of_cpd_list cpd_list
   | Print_Tree -> print_tree tree
   | Inference  -> 
+      let p_time1 = Unix.times () in
       let stream_fn tree = 
         upstream tree ~print_send:params.debug_send;
         if params.debug_send then print_endline "Downstream...";
@@ -84,8 +90,10 @@ let run () =
       let answers = 
         if params.debug_send then print_endline "\nWith evidence:";
         process_queries ~incremental:params.incremental stream_fn tree query_list in
+      let p_time2 = Unix.times () in
       List.iter (function Some a -> Printf.printf "%.13f\n" a
-                         | None  -> print_endline "error") answers
+                         | None  -> print_endline "error") answers;
+      if params.time then Printf.printf "User time: %f\n" (p_time2.tms_utime -. p_time1.tms_utime) else ()
 
 let _ = 
   if !Sys.interactive then ()
