@@ -2,12 +2,18 @@ open Util
 open CliqueTree
 open Cpd
 
+type assign = (string * string)
+
 type query = { 
-  p_of  : (string * string) list;
-  given : (string * string) list;
+  p_of  : assign list;
+  given : assign list;
 }
 
-let parse_queries file =
+let string_of_assignments ss =
+  let ss = List.map (fun (k,v) -> Printf.sprintf "%s = %s" k v) ss in
+  String.concat ", " ss
+
+let parse_queries ~scheme file =
   let get_key_val str = 
     let xs = r_split "=" str in
     hd xs, at xs 1
@@ -18,7 +24,10 @@ let parse_queries file =
     match r_split " " line with
     | [q; dep] -> 
         let qs = r_split "," q in
-        let p_of = List.map get_key_val qs in
+        let p_of = match scheme with
+          | SumProduct -> List.map get_key_val qs
+          | MaxProduct -> List.map (fun s -> s,"") qs
+        in
         let deps = r_split "," dep in
         let given = List.map get_key_val deps in
         {p_of; given}
@@ -66,7 +75,7 @@ let find_answer tree query =
         let cpd = marginalize node.node_cpd node_diff_idx in
         let cpd = normalize_and_real cpd in
         let cpd = add_evidence cpd q_vars q_values in
-        let answer = List.fold_left (fun p_tot (_,p) -> p_tot +. p) 0. cpd.data in
+        let answer = List.fold_left (fun p_tot (_,p,_) -> p_tot +. p) 0. cpd.data in
         raise @: Answer(answer)
     ) None tree
   with Answer a -> Some a
@@ -99,12 +108,37 @@ let process_queries ~incremental stream_fn tree q_list =
           else (* retractive *)
             retractive ()
 
-      | _ -> retractive () (* retractive. we must reset the tree *)
-
-    ) 
+      | _ -> retractive ()) (* retractive. we must reset the tree *)
     ([], None)
     q_list
   in answers
+
+let process_queries_max stream_fn tree q_list : (float * assign list) list =
+  List.map (fun q ->
+    let q_vars_arr = Array.of_list @: fst_many q.p_of in
+    reset_edges_all tree;
+    restore_node_cpds tree;
+    apply_evidence tree q.given;
+    let root = match maxproduct_find_root tree q_vars_arr with
+      | None   -> failwith "couldn't find appropriate root"
+      | Some r -> r
+    in
+    stream_fn tree root; (* upstream only *)
+    let _, node_idxs, _, diff_idxs = 
+      intersect q_vars_arr root.node_cpd.backptrs in
+    let cpd = root.node_cpd in
+    let cpd = normalize_and_real cpd in
+    let cpd = marginalize_max cpd diff_idxs in
+    if List.length cpd.data <> 1 then 
+      failwith "data hasn't reduced to 1 line";
+    let _, p, back_vals = hd cpd.data in
+    let l = List.length node_idxs in
+    let wanted_vals = Array.to_list @: 
+      take_idxs node_idxs l back_vals in
+    let wanted_var_names = Array.to_list @:
+      take_idxs node_idxs l root.node_cpd.backptrs in
+    p, list_zip wanted_var_names wanted_vals
+  ) q_list
 
 
 

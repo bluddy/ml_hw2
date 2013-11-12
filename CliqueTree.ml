@@ -15,6 +15,8 @@ type node = {
   mutable saved_cpd: cpd;
 }
 
+type scheme = MaxProduct | SumProduct
+
 let empty_edge () = {sepset=[||]; edge_cpd=empty_cpd (); msg_waiting=[]}
 
 type tree = node * (int * int, edge) Hashtbl.t 
@@ -149,14 +151,15 @@ let set_sepset tree node1 =
 let set_tree_sepsets tree = tree_fold 
    (fun _ node -> set_sepset tree node) () tree
 
-let find_leaves ((root,_) as tree) = tree_fold (fun acc node -> 
+let find_leaves tree root = 
+  tree_fold (fun acc node -> 
     match node.edges with 
     | [x] when node.id <> root.id -> node::acc
     | _   -> acc
   ) [] tree
 
 (* send a msg from node1 to node2 *)
-let send_msg ?(print_send=false) tree node1 node2 =
+let send_msg ?(print_send=false) ~scheme tree node1 node2 =
   let edge = lookup_edge tree (node1, node2) in
   (* get the indices of the difference between the scope and the sepset *)
   let _, _, scope_idxs, _ = intersect node1.scope edge.sepset in
@@ -174,7 +177,10 @@ let send_msg ?(print_send=false) tree node1 node2 =
       node1.id (string_of_string_array node1.scope) (string_of_string_array edge.sepset)
       (string_of_string_array @: var_set);
     Printf.printf "Node %d cpd:\n%s\n" node1.id (string_of_cpd node1.node_cpd));
-  let msg = marginalize node1.node_cpd cpd_idxs in
+  let msg = match scheme with
+    | SumProduct -> marginalize node1.node_cpd cpd_idxs
+    | MaxProduct -> marginalize_max node1.node_cpd cpd_idxs
+  in
   if print_send then
     Printf.printf "Node %d marginalized cpd:\n%s\n" node1.id (string_of_cpd msg); (* debug *)
   let msg = div msg edge.edge_cpd in
@@ -198,7 +204,7 @@ let downstream ?print_send tree =
         let edge = lookup_edge tree (node1, node2) in
         (* send a msg *)
         if not @: List.mem node2.id edge.msg_waiting then
-          (send_msg ?print_send tree node1 node2;
+          (send_msg ?print_send ~scheme:SumProduct tree node1 node2;
            Queue.add node2 q);
         (* make sure we received all msgs *)
         let my_msg = List.mem node1.id edge.msg_waiting in
@@ -211,9 +217,9 @@ let downstream ?print_send tree =
   in
   loop @: Queue.pop q
 
-let upstream ?print_send tree =
-  let root = fst tree in
-  let leaves = find_leaves tree in
+(* for maxproduct, we only need an upstream, and our root can vary *)
+let upstream ?print_send ~scheme tree root =
+  let leaves = find_leaves tree root in
   let q = Queue.create () in
   List.iter (fun n -> Queue.add n q) leaves;
   let rec loop node1 =
@@ -228,7 +234,7 @@ let upstream ?print_send tree =
         node1.edges
     in
     if acc_nomsg = 1 && not already_sent then 
-      (send_msg ?print_send tree node1 dest_node;
+      (send_msg ?print_send ~scheme tree node1 dest_node;
       (* don't add root so we never execute in upstream *)
       if dest_node.id <> root.id then Queue.add dest_node q else ());
     try loop @: Queue.pop q with Queue.Empty -> ()
@@ -244,4 +250,20 @@ let restore_node_cpds tree =
   tree_fold (fun _ node ->
     node.node_cpd <- node.saved_cpd; ()
   ) () tree
+
+(* a maxproduct query root should have any one of the query vars
+ * to marginalize over *)
+exception Answer of node
+
+let maxproduct_find_root tree query_vars =
+  try 
+    tree_fold (fun _ node ->
+        let common_idxs, _, _, _ = 
+          intersect node.node_cpd.vars query_vars in
+        if common_idxs <> [] then
+          raise @: Answer(node)
+        else None)
+      None
+      tree
+  with Answer(node) -> Some node
 

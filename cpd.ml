@@ -1,42 +1,50 @@
 open Util
 
-type cpd_line = string array * float
+(* contains both vars and backptrs *)
+type cpd_line = string array * float * string array 
 
 type cpd = {vars:string array;
+            backptrs: string array;
             data:cpd_line list;
            }
 
-let empty_cpd () = {vars=[||]; data=[]}
+let empty_cpd () = {vars=[||]; backptrs=[||]; data=[]}
 
 let cpd_to_log cpd =
-  let data = List.rev_map (fun (v,p) -> (v, log p)) cpd.data in
-  {vars=cpd.vars; data}
+  let data = List.rev_map (fun (v,p,back) -> v, log p, back) cpd.data in
+  {cpd with data}
 
-let max_cpd_p {vars; data} =
-  List.fold_left (fun max (_,p) -> if p > max then p else max) 
-    (snd @: hd data) 
-    (tl data)
+let max_cpd_p cpd =
+  List.fold_left (fun max (_,p,_) -> if p > max then p else max) 
+    (let _,p,_ = hd cpd.data in p) 
+    (tl cpd.data)
 
 let cpd_from_log cpd =
   let max = max_cpd_p cpd in
-  let data = List.rev_map (fun (v,p) -> v, exp @: p -. max) cpd.data in
-  {vars=cpd.vars; data}
+  let data = List.rev_map (fun (v,p,b) -> v, exp @: p -. max,b) cpd.data in
+  {cpd with data}
 
 let string_of_cpd cpd : string =
-  let {vars; data} = cpd_from_log cpd in
+  let {vars; backptrs; data} = cpd_from_log cpd in
   let vars = Array.to_list vars in
+  let backptrs = Array.to_list backptrs in
   let s_list =
     (match vars with 
-     | []  -> ["!!! Empty vars !!!";"data:"]
-     | [x] -> [x;"data:"]
+     | []  -> "!!! Empty vars !!!"
+     | [x] -> x
      | _   ->
-      [Printf.sprintf "%s | " (hd vars)^
-      String.concat ", " @: tl vars;
-      "data:"])@
-    List.map (fun (deps, p) ->
-      let deps = Array.to_list deps in
-      let dep_s = String.concat ", " @: tl deps in
-      Printf.sprintf "%s | %s -> %f" (hd deps) dep_s p
+      Printf.sprintf "%s | " (hd vars)^
+      String.concat ", " @: tl vars)::
+    (match backptrs with
+     | []  -> ""
+     | _   -> "backptrs: "^
+      String.concat ", " @: backptrs)::
+    "data:"::
+    List.map (fun (deps, p, back) ->
+      let deps_s = string_of_string_array deps in
+      (Printf.sprintf "%s -> %f" deps_s p)^
+      match back with [||] -> ""
+                    | _    -> ": "^string_of_string_array back
     ) data
   in
   String.concat "\n" s_list
@@ -67,17 +75,14 @@ let parse_cpd file =
     let p = float_of_string @: at elems 2 in
     let key = Array.of_list @: var_name::dep_names in
     (* convert to log space already here *)
-    let cpd_line = Array.of_list(var_val::dep_vals), log p in
+    let cpd_line = Array.of_list(var_val::dep_vals), log p, [||] in
     let cpd = try Hashtbl.find h key 
-              with Not_found -> {vars=key; data=[]} (* create a new cpd *)
+      with Not_found -> {vars=key; backptrs=[||]; data=[]} (* create a new cpd *)
     in
     let cpd' = {cpd with data = cpd_line::cpd.data} in
     Hashtbl.replace h key cpd'
   ) lines;
   Hashtbl.fold (fun k v acc -> v::acc) h []
-
-(*  let var_nums = List.flatten @:
-    list_mapi (fun (i, var) -> if List.mem var vars then [i] else []) cpd.vars *)
 
 let cpd_find_idxs cpd (var_names:string list) = 
   let h = Hashtbl.create 10 in
@@ -122,7 +127,7 @@ let marginalize cpd idxs =
   (* handle data *)
   let h = Hashtbl.create 10 in
   let cpd_real = cpd_from_log cpd in
-  List.iter (fun (var_vals, p) ->
+  List.iter (fun (var_vals, p, _) ->
     let shrunk_vars = take_idxs remain_idxs remain_len var_vals in
     (* check for shrunk vars in hashtable *)
     try 
@@ -133,14 +138,39 @@ let marginalize cpd idxs =
       Hashtbl.add h shrunk_vars @: p
   ) cpd_real.data;
   (* get back whole cpd *)
-  let data = Hashtbl.fold (fun vars p acc -> (vars, log p)::acc) h [] in
-  {vars=var_names; data}
+  let data = Hashtbl.fold (fun vars p acc -> (vars, log p, [||])::acc) h [] in
+  {cpd with vars=var_names; data}
+
+(* note: could work straight on indices *)
+let marginalize_max cpd idxs =
+  let var_len = Array.length cpd.vars in
+  let remain_idxs = invert_idxs idxs var_len in
+  let remain_len = List.length remain_idxs in
+  let var_names = take_idxs remain_idxs remain_len cpd.vars in
+  (* handle data *)
+  let h = Hashtbl.create 10 in
+  List.iter (fun (var_vals, p, back_vals) ->
+    let shrunk_vars = take_idxs remain_idxs remain_len var_vals in
+    (* check for shrunk vars in hashtable *)
+    try 
+      (* if we have them, update the probability *)
+      let saved_p, _ = Hashtbl.find h shrunk_vars in
+      if p > saved_p then
+        Hashtbl.replace h shrunk_vars (p, back_vals);
+    with Not_found -> (* instantiate *)
+      Hashtbl.add h shrunk_vars (p, back_vals)
+  ) cpd.data;
+  (* get back whole cpd *)
+  let data = Hashtbl.fold (fun vars (p,back_vals) acc -> 
+      (vars, p, back_vals)::acc) 
+    h [] in
+  {cpd with vars=var_names; data}
 
 (* filter a cpd by adding evidence, setting a var to a value *)
 let add_evidence cpd var_list value_list =
   (*print_endline @: "Adding evidence "^(string_of_string_list var_list)^"\n";*)
   let idxs = cpd_find_idxs cpd var_list in
-  let data = List.filter (fun (var_vals, p) ->
+  let data = List.filter (fun (var_vals, p, _) ->
       List.for_all2 (fun idx v -> var_vals.(idx) = v) idxs value_list)
     cpd.data
   in
@@ -183,18 +213,18 @@ let condition cpd_data idxs_keys idxs_keys_len : (string array, cpd_line list) H
   let h = Hashtbl.create 10 in
   match cpd_data with [] -> h | _ ->
   let len_vars = 
-    let vars, p = hd cpd_data in
+    let vars, _, _ = hd cpd_data in
     Array.length vars
   in
   let idxs_vals = invert_idxs idxs_keys len_vars in
   let idxs_vals_len = len_vars - idxs_keys_len in
-  List.iter (fun (vars, p) ->
+  List.iter (fun (vars, p, back) ->
     let keys = take_idxs idxs_keys idxs_keys_len vars in
     let vals = take_idxs idxs_vals idxs_vals_len vars in
     try
       let oldvals = Hashtbl.find h keys in
-      Hashtbl.replace h keys @: (vals, p)::oldvals
-    with Not_found -> Hashtbl.add h keys [vals, p]
+      Hashtbl.replace h keys @: (vals, p, back)::oldvals
+    with Not_found -> Hashtbl.add h keys [vals, p, back]
   ) cpd_data;
   h
 
@@ -212,6 +242,8 @@ let concat_vars l_vars =
     
 (* get the join-based product of 2 cpds *)
 (* we really use addition since the cpd is in log space *)
+(* for backpointers, we don't need to worry about having the same varname because
+ * of the running intersection property *)
 let product cpd1 cpd2 =
   match cpd1, cpd2 with
   | c, _ when c.data = [] -> cpd2
@@ -224,17 +256,20 @@ let product cpd1 cpd2 =
   let vars_common = take_idxs idxs1 l_common_idxs cpd1.vars in
   let vars_diff1 = take_idxs diff_idxs1 l_diff_idxs1 cpd1.vars in
   let vars_diff2 = take_idxs diff_idxs2 l_diff_idxs2 cpd2.vars in
-  let new_vars = concat_vars [vars_common; vars_diff1; vars_diff2] in
+  let vars = concat_vars [vars_common; vars_diff1; vars_diff2] in
   let cpd1_c_hash = condition cpd1.data idxs1 l_common_idxs in
   let cpd2_c_hash = condition cpd2.data idxs2 l_common_idxs in
-  let new_data =
+  let backptrs = concat_vars [cpd1.backptrs; cpd2.backptrs] in
+  let data =
     Hashtbl.fold (fun keys cpd1_d acc_cpd ->
       let cpd2_d = 
         try Hashtbl.find cpd2_c_hash keys with Not_found -> [] in
       let cross_product =
-        List.fold_left (fun acc (vals1, p1) ->
-          List.fold_left (fun acc' (vals2, p2) ->
-            (concat_vars [keys;vals1;vals2], p1 +. p2)::acc'
+        List.fold_left (fun acc (vals1, p1, back1) ->
+          List.fold_left (fun acc' (vals2, p2, back2) ->
+            (concat_vars [keys;vals1;vals2], 
+             p1 +. p2, (* log space *)
+             concat_vars [back1; back2])::acc'
           ) acc cpd2_d
         ) [] cpd1_d
       in
@@ -242,7 +277,7 @@ let product cpd1 cpd2 =
     ) 
     cpd1_c_hash []
   in
-  {vars=new_vars; data=new_data}
+  {vars; backptrs ;data }
 
 (* to do division, we loop over the common vars and divide the bigger factor
  * by the smaller one *)
@@ -255,25 +290,26 @@ let div cpd1 cpd2 =
   let cpd2_c_hash = condition cpd2.data idxs2 l_common_idxs in
   (* we mostly keep the first cpd *)
   let new_data =
-    List.rev_map (fun (vars, p1) ->
+    List.rev_map (fun (vars, p1, back) ->
         let keys  = take_idxs idxs1 l_common_idxs vars in
-        let _, p2 = try hd @: Hashtbl.find cpd2_c_hash keys
+        let _, p2, _ = try hd @: Hashtbl.find cpd2_c_hash keys
                     with Not_found -> failwith @: "div: missing value" in
         let div = match p1, p2 with
           (*| 0., 0. -> 0.*)
           (*| _,  0. -> failwith "div: divide by 0"*)
           | _,  _  -> p1 -. p2 (* we're in log space *)
         in
-        vars, div)
+        vars, div, back)
      cpd1.data
   in
   {cpd1 with data=new_data}
 
 let normalize_and_real cpd =
   let cpd_real = cpd_from_log cpd in
-  let total_p = List.fold_left (fun acc_p (_,p) -> acc_p +. p) 0. cpd_real.data in
+  let total_p = List.fold_left (fun acc_p (_,p,_) -> acc_p +. p) 0. cpd_real.data in
   let data' =
-    List.fold_left (fun acc (data,p) -> (data, p /. total_p)::acc) [] cpd_real.data
+    List.fold_left (fun acc (data,p,back) -> 
+      (data, p /. total_p, back)::acc) [] cpd_real.data
   in
   {cpd with data=data'}
 
@@ -281,29 +317,32 @@ let normalize_and_real cpd =
 (* ******* tests *************************************)
 
 let test_cpd = {vars=[|"a";"b"|]; 
+                backptrs=[||];
                 data=[
-                  [|"0";"0"|], 0.5;
-                  [|"1";"0"|], 0.5;
-                  [|"0";"1"|], 0.2;
-                  [|"1";"1"|], 0.8;
+                  [|"0";"0"|], 0.5, [||];
+                  [|"1";"0"|], 0.5, [||];
+                  [|"0";"1"|], 0.2, [||];
+                  [|"1";"1"|], 0.8, [||];
                 ]
                 }
 
 let test_cpd' = {vars=[|"c";"b"|]; 
+                backptrs=[||];
                 data=[
-                  [|"0";"0"|], 0.3;
-                  [|"1";"0"|], 0.6;
-                  [|"0";"1"|], 0.7;
-                  [|"1";"1"|], 0.;
+                  [|"0";"0"|], 0.3, [||];
+                  [|"1";"0"|], 0.6, [||];
+                  [|"0";"1"|], 0.7, [||];
+                  [|"1";"1"|], 0., [||];
                 ]
                 }
 
 let test_cpd'' = {vars=[|"c";"d"|]; 
+                backptrs=[||];
                 data=[
-                  [|"0";"0"|], 0.3;
-                  [|"1";"0"|], 0.6;
-                  [|"0";"1"|], 0.7;
-                  [|"1";"1"|], 0.;
+                  [|"0";"0"|], 0.3, [||];
+                  [|"1";"0"|], 0.6, [||];
+                  [|"0";"1"|], 0.7, [||];
+                  [|"1";"1"|], 0., [||];
                 ]
                 }
 
@@ -312,28 +351,30 @@ let condition_test () = condition test_cpd.data [1] 1
 let product_test () = product test_cpd test_cpd'
 
 let test_cpd2 = {vars=[|"a";"b";"c"|]; 
+                backptrs=[||];
                 data=[
-                  [|"0";"0";"0"|], 0.5;
-                  [|"0";"0";"1"|], 0.25;
-                  [|"0";"1";"0"|], 0.2;
-                  [|"0";"1";"1"|], 0.8;
-                  [|"1";"0";"0"|], 0.75;
-                  [|"1";"0";"1"|], 0.6;
-                  [|"1";"1";"0"|], 0.4;
-                  [|"1";"1";"1"|], 0.1;
+                  [|"0";"0";"0"|], 0.5, [||];
+                  [|"0";"0";"1"|], 0.25, [||];
+                  [|"0";"1";"0"|], 0.2, [||];
+                  [|"0";"1";"1"|], 0.8, [||];
+                  [|"1";"0";"0"|], 0.75, [||];
+                  [|"1";"0";"1"|], 0.6, [||];
+                  [|"1";"1";"0"|], 0.4, [||];
+                  [|"1";"1";"1"|], 0.1, [||];
                 ]
                 }
 
 let test_cpd2' = {vars=[|"c";"d";"b"|]; 
+                backptrs=[||];
                 data=[
-                  [|"0";"0";"0"|], 0.9;
-                  [|"0";"0";"1"|], 0.15;
-                  [|"0";"1";"0"|], 0.32;
-                  [|"0";"1";"1"|], 0.45;
-                  [|"1";"0";"0"|], 0.22;
-                  [|"1";"0";"1"|], 0.55;
-                  [|"1";"1";"0"|], 0.11;
-                  [|"1";"1";"1"|], 0.0;
+                  [|"0";"0";"0"|], 0.9, [||];
+                  [|"0";"0";"1"|], 0.15, [||];
+                  [|"0";"1";"0"|], 0.32, [||];
+                  [|"0";"1";"1"|], 0.45, [||];
+                  [|"1";"0";"0"|], 0.22, [||];
+                  [|"1";"0";"1"|], 0.55, [||];
+                  [|"1";"1";"0"|], 0.11, [||];
+                  [|"1";"1";"1"|], 0.0, [||];
                 ]
                 }
 

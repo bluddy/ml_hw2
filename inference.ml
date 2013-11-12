@@ -7,6 +7,7 @@ open Unix
 type actions = Print_Tree
              | Print_CPDs
              | Inference
+             | MaxProductInference
 
 type params_t = {
   mutable action: actions;
@@ -38,6 +39,8 @@ let parse_cmd_line () =
    [
     "--incremental", Arg.Unit (fun () -> params.incremental <- true),
      "Incremental computation";
+    "--max", Arg.Unit (fun () -> params.action <- MaxProductInference),
+     "Use max-product instead of sum-product";
     "--print_cpds", Arg.Unit (fun () -> params.action <- Print_CPDs),
      "Only print the CPDs";
     "--print_init_tree", Arg.Unit (fun () -> params.action <- Print_Tree),
@@ -65,13 +68,15 @@ let parse_cmd_line () =
 let print_tree tree = print_endline @: string_of_tree tree
 
 let run () = 
+  let scheme = if params.action=MaxProductInference 
+               then MaxProduct else SumProduct in
   let tree = parse_clique_tree params.cliquetree_file in
   (*print_endline "parsed clique tree";*)
   set_tree_sepsets tree;
   (*print_endline "set sepsets";*)
   let cpd_list = parse_cpd params.cpd_file in
   (*print_endline "parsed cpds";*)
-  let query_list = parse_queries params.queries_file in
+  let query_list = parse_queries ~scheme params.queries_file in
   let tree = tree_fill_cpds tree cpd_list in
   save_node_cpds tree;
   (*print_endline "filled tree with cpds";*)
@@ -81,7 +86,7 @@ let run () =
   | Inference  -> 
       let p_time1 = Unix.times () in
       let stream_fn tree = 
-        upstream tree ~print_send:params.debug_send;
+        upstream tree (fst tree) ~scheme ~print_send:params.debug_send;
         if params.debug_send then print_endline "Downstream...";
         downstream tree ~print_send:params.debug_send;
         if params.print_tree then (print_endline "Tree:"; print_tree tree) else ()
@@ -93,9 +98,23 @@ let run () =
       let p_time2 = Unix.times () in
       List.iter (function Some a -> Printf.printf "%.13f\n" a
                          | None  -> print_endline "error") answers;
-      if params.time then Printf.printf "User time: %f\n" (p_time2.tms_utime -. p_time1.tms_utime) else ()
+      if params.time then 
+        Printf.printf "User time: %f\n" (p_time2.tms_utime -. p_time1.tms_utime)
+        else ()
 
-let _ = 
+  | MaxProductInference ->
+      let stream_fn tree root = 
+        upstream tree root ~scheme:MaxProduct ~print_send:params.debug_send;
+        if params.print_tree then (print_endline "Tree:"; print_tree tree) else ()
+      in
+      (* don't do an early pass *)
+      let answers = process_queries_max stream_fn tree query_list in
+      List.iter (function (p, var_list) ->
+          Printf.printf "%.13f: %s\n" p (string_of_assignments var_list)
+        )
+        answers
+
+let _ =
   if !Sys.interactive then ()
   else
     (parse_cmd_line ();
