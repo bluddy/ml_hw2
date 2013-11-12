@@ -100,7 +100,9 @@ let process_queries ~incremental stream_fn tree q_list =
             (answer::acc_answers, Some q)
           else if d1 && incremental then
             let delta_given = diff q.given last_q.given in
-            reset_edge_mailboxes tree;
+            (*reset_edge_mailboxes tree;*)
+            normalize_tree tree;
+            reset_edges_all tree;
             apply_evidence tree delta_given;
             stream_fn tree;
             let answer = find_answer tree q.p_of in
@@ -143,7 +145,25 @@ let process_queries_max stream_fn tree q_list : (float * assign list) list =
     p, list_zip wanted_var_names wanted_vals
   ) q_list
 
-
+(* don't apply to first element of cpds *)
+let apply_evidence_to_cpds ~full cpd_list given =
+  let h = Hashtbl.create 10 in
+  List.iter (fun (k,v) -> Hashtbl.add h k v) given;
+  List.fold_left (fun acc cpd ->
+    let cpd_vars = Array.to_list cpd.vars in
+    let add_vars, add_vals = 
+      List.fold_left (fun (acc_vars, acc_vals) var_name ->
+        try
+          let value = Hashtbl.find h var_name in
+          (*Hashtbl.remove h var_name;*)
+          var_name::acc_vars, value::acc_vals 
+        with Not_found -> acc_vars, acc_vals)
+      ([],[])
+      (if full then cpd_vars else tl cpd_vars)
+    in
+    let cpd' = add_evidence cpd add_vars add_vals in
+    cpd'::acc
+  ) [] cpd_list
 
 
 

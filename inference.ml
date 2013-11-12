@@ -8,6 +8,7 @@ type actions = Print_Tree
              | Print_CPDs
              | Inference
              | MaxProductInference
+             | ComputeJoint
 
 type params_t = {
   mutable action: actions;
@@ -41,6 +42,8 @@ let parse_cmd_line () =
      "Incremental computation";
     "--max", Arg.Unit (fun () -> params.action <- MaxProductInference),
      "Use max-product instead of sum-product";
+    "--joint", Arg.Unit (fun () -> params.action <- ComputeJoint),
+     "Compute the joint for a certain assignment";
     "--print_cpds", Arg.Unit (fun () -> params.action <- Print_CPDs),
      "Only print the CPDs";
     "--print_init_tree", Arg.Unit (fun () -> params.action <- Print_Tree),
@@ -67,7 +70,23 @@ let parse_cmd_line () =
 
 let print_tree tree = print_endline @: string_of_tree tree
 
+
+let compute_joint () =
+  let cpd_list = parse_cpd params.cpd_file in
+  let {p_of; _} = hd @: parse_queries ~scheme:SumProduct params.queries_file in
+  print_endline "applying evidence...";
+  let (cpd_list:cpd list) = apply_evidence_to_cpds ~full:false cpd_list p_of in
+  print_endline "product...";
+  let product = List.fold_left (fun acc cpd ->
+      product cpd acc) 
+    (empty_cpd ()) cpd_list in
+  let cpd = normalize_and_real product in
+  let cpd = apply_evidence_to_cpds ~full:true [cpd] p_of in
+  print_endline @: string_of_cpd @: hd cpd
+
+
 let run () = 
+  if params.action = ComputeJoint then compute_joint () else ();
   let scheme = if params.action=MaxProductInference 
                then MaxProduct else SumProduct in
   let tree = parse_clique_tree params.cliquetree_file in
@@ -113,6 +132,7 @@ let run () =
           Printf.printf "%.13f: %s\n" p (string_of_assignments var_list)
         )
         answers
+   | _ -> failwith "bad input"
 
 let _ =
   if !Sys.interactive then ()

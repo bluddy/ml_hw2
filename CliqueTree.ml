@@ -267,3 +267,11 @@ let maxproduct_find_root tree query_vars =
       tree
   with Answer(node) -> Some node
 
+let normalize_tree tree =
+  tree_fold (fun () node ->
+    let cpd = normalize_and_real node.node_cpd in
+    let cpd = cpd_to_log cpd in
+    node.node_cpd <- cpd;
+    ())
+  () tree
+

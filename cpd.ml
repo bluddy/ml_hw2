@@ -314,6 +314,7 @@ let normalize_and_real cpd =
   {cpd with data=data'}
 
 
+
 (* ******* tests *************************************)
 
 let test_cpd = {vars=[|"a";"b"|]; 
