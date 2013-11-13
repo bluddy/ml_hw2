@@ -2,14 +2,14 @@ open Util
 open Cpd
 
 type edge = {
-  mutable sepset: string array;
+  mutable sepset: id array;
   mutable edge_cpd: cpd;
   mutable msg_waiting: int list;
 }
 
 type node = {
   id: int;
-  scope: string array;
+  scope: id array;
   mutable edges: node list; (* node and whether I received a msg *)
   mutable node_cpd: cpd;
   mutable saved_cpd: cpd;
@@ -50,14 +50,14 @@ let modify_edge ((_,h) : tree) (node1, node2) f =
   Hashtbl.replace h key value'
 
 let string_of_node {id; scope; edges; node_cpd} = 
-  let scope_s = String.concat ", " (Array.to_list scope) in
+  let scope_s = String.concat ", " (str_of_id_many @: Array.to_list scope) in
   let edge_ids = List.map (fun node -> string_of_int node.id) edges in
   let edges_s = String.concat "," edge_ids in
   let cpd_s = string_of_cpd node_cpd in
   Printf.sprintf "id: %d\nscope: %s\nedges: %s\ncpd: %s\n" id scope_s edges_s cpd_s
 
 let string_of_edge {sepset; edge_cpd} =
-  "sepset: "^String.concat ", " (Array.to_list sepset)^
+  "sepset: "^String.concat ", " (str_of_id_many @: Array.to_list sepset)^
   "\nedge cpd: \n"^string_of_cpd edge_cpd
 
 let tree_fold fn init ((t, _) : tree) =
@@ -92,8 +92,10 @@ let parse_clique_tree file =
   let node_l = ref [] in
   (* add to hashtable *)
   List.iter (fun line ->
-      let scope = Array.of_list @: r_split "," line in
-      let new_node = {id=(!count); scope; edges=[]; node_cpd=empty_cpd (); saved_cpd=empty_cpd ()} in
+      let scope = Array.of_list @: id_of_str_many @: r_split "," line in
+      let new_node = 
+        {id=(!count); scope; edges=[]; node_cpd=empty_cpd (); 
+         saved_cpd=empty_cpd ()} in
       Hashtbl.add node_tbl line new_node;
       node_l := new_node::(!node_l);
       count := !count + 1
@@ -167,22 +169,24 @@ let send_msg ?(print_send=false) ~scheme tree node1 node2 =
   let cpd_idxs = try cpd_find_idxs_arr node1.node_cpd var_set 
                  with Not_found -> let s = 
                    Printf.sprintf "Node %d scope is %s but cpd is %s. Missing vars." node1.id 
-                    (string_of_string_array node1.scope)
-                    (string_of_string_array node1.node_cpd.vars) in
+                    (sosa node1.scope)
+                    (sosa node1.node_cpd.vars) in
                    failwith s
   in
   (* debug *)
   if print_send then
     (Printf.printf "Node %d scope: %s\nEdge sepset: %s\nDiff: %s\n"
-      node1.id (string_of_string_array node1.scope) (string_of_string_array edge.sepset)
-      (string_of_string_array @: var_set);
+      node1.id (sosa node1.scope) (sosa edge.sepset)
+      (sosa var_set);
     Printf.printf "Node %d cpd:\n%s\n" node1.id (string_of_cpd node1.node_cpd));
+  print_endline "marginalize";
   let msg = match scheme with
     | SumProduct -> marginalize node1.node_cpd cpd_idxs
     | MaxProduct -> marginalize_max node1.node_cpd cpd_idxs
   in
   if print_send then
     Printf.printf "Node %d marginalized cpd:\n%s\n" node1.id (string_of_cpd msg); (* debug *)
+  print_endline "divide";
   let msg = div msg edge.edge_cpd in
   if print_send then
     Printf.printf "Node %d divided msg:\n%s\n" node1.id (string_of_cpd msg); (* debug *)
@@ -190,7 +194,9 @@ let send_msg ?(print_send=false) ~scheme tree node1 node2 =
   edge.msg_waiting <- node2.id::edge.msg_waiting;
   if print_send then
     Printf.printf "Node %d pre-product cpd:\n%s\n" node2.id (string_of_cpd node2.node_cpd); (* debug *)
+  print_endline "product";
   node2.node_cpd <- product node2.node_cpd msg;
+  print_endline "done";
   if print_send then
     Printf.printf "Node %d post-product cpd:\n%s\n" node2.id (string_of_cpd node2.node_cpd) (* debug *)
 

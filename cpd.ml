@@ -1,12 +1,45 @@
 open Util
 
 (* contains both vars and backptrs *)
-type cpd_line = string array * float * string array 
+type id = int
 
-type cpd = {vars:string array;
-            backptrs: string array;
+type cpd_line = id array * float * id array 
+
+type cpd = {vars:id array;
+            backptrs: id array;
             data:cpd_line list;
            }
+
+(* save memory with hashtbl *)
+let id_str_h = Hashtbl.create 100
+let str_id_h = Hashtbl.create 100
+let g_cnt = ref 0
+
+let add_id str =
+    g_cnt := !g_cnt + 1;
+    Hashtbl.add str_id_h str !g_cnt;
+    Hashtbl.add id_str_h !g_cnt str;
+    !g_cnt
+
+let id_of_str str = try Hashtbl.find str_id_h str 
+  with Not_found -> add_id str
+
+let str_of_id id = try Hashtbl.find id_str_h id
+ with Not_found -> failwith "Bad id!"
+
+let id_of_str_many strs = List.map id_of_str strs
+let str_of_id_many ids = List.map str_of_id ids
+
+let id_of_str_pairs strs =
+  List.map (fun (a,b) -> id_of_str a, id_of_str b) strs
+let str_of_id_pairs ids =
+  List.map (fun (a,b) -> str_of_id a, str_of_id b) ids
+
+let id_of_str_arr strs = Array.map id_of_str strs
+let str_of_id_arr ids = Array.map str_of_id ids
+
+let sosa arr = string_of_string_array @: str_of_id_arr arr
+let sosl l = string_of_string_list @: str_of_id_many l
 
 let empty_cpd () = {vars=[||]; backptrs=[||]; data=[]}
 
@@ -27,8 +60,8 @@ let cpd_from_log cpd =
 
 let string_of_cpd cpd : string =
   let {vars; backptrs; data} = cpd_from_log cpd in
-  let vars = Array.to_list vars in
-  let backptrs = Array.to_list backptrs in
+  let vars = str_of_id_many @: Array.to_list vars in
+  let backptrs = str_of_id_many @: Array.to_list backptrs in
     ((match vars with 
      | []  -> "!!! Empty vars !!!"
      | [x] -> x
@@ -39,10 +72,11 @@ let string_of_cpd cpd : string =
     "\ndata:\n")^
     String.concat "\n" @: 
       List.map (fun (deps, p, back) ->
-        let deps_s = string_of_string_array deps in
+        let deps_s = string_of_string_array @: str_of_id_arr deps in
         (Printf.sprintf "%s -> %f" deps_s p)^
         match back with [||] -> ""
-                      | _    -> ": "^string_of_string_array back
+                      | _    -> ": "^
+                         string_of_string_array @: str_of_id_arr back
       ) data
 
 let string_of_cpd_list cs : string = 
@@ -52,7 +86,7 @@ let string_of_cpd_list cs : string =
 let concat_vars l_vars =
   let len = List.fold_left (fun acc arr -> acc + Array.length arr)
     0 l_vars in
-  let new_arr = Array.create len "" in
+  let new_arr = Array.create len (-1) in
   let _ = List.fold_left (fun acc_len arr ->
     let arr_len = Array.length arr in
     Array.blit arr 0 new_arr acc_len arr_len;
@@ -73,12 +107,14 @@ let parse_cpd file =
   List.iter (fun line ->
     let elems = r_split " " line in
     let var_name, var_val = get_key_val @: hd elems in
+    let var_name, var_val = id_of_str var_name, id_of_str var_val in
     (* get dependencies *)
     let dep_list = r_split "," @: at elems 1 in
     let dep_names, dep_vals = 
       List.fold_right (fun str (acc_names, acc_vals) ->
         let n, v = get_key_val str in
-        n::acc_names, v::acc_vals) dep_list ([],[]) in
+        let n_id, v_id = id_of_str n, id_of_str v in
+        n_id::acc_names, v_id::acc_vals) dep_list ([],[]) in
     (* get prob value *)
     let p = float_of_string @: at elems 2 in
     let key = Array.of_list @: var_name::dep_names in
@@ -92,7 +128,7 @@ let parse_cpd file =
   ) lines;
   Hashtbl.fold (fun k v acc -> v::acc) h []
 
-let cpd_find_idxs cpd (var_names:string list) = 
+let cpd_find_idxs cpd (var_names:id list) = 
   let h = Hashtbl.create 10 in
   Array.iteri (fun i var -> Hashtbl.add h var i) cpd.vars;
   List.fold_left (fun acc var ->
@@ -100,7 +136,7 @@ let cpd_find_idxs cpd (var_names:string list) =
     []
     var_names
 
-let cpd_find_idxs_arr cpd (var_names:string array) = 
+let cpd_find_idxs_arr cpd (var_names:id array) = 
   let h = Hashtbl.create 10 in
   Array.iteri (fun i var -> Hashtbl.add h var i) cpd.vars;
   Array.fold_left (fun acc var ->
@@ -109,7 +145,7 @@ let cpd_find_idxs_arr cpd (var_names:string array) =
     var_names
 
 let take_idxs take_idxs len_take xs =
-  let take = Array.make len_take "" in
+  let take = Array.make len_take (-1) in
   let _ = List.fold_left (fun cnt i ->
     take.(cnt) <- xs.(i); cnt + 1
   ) 0 take_idxs in
@@ -221,7 +257,7 @@ let subset vars1 vars2 =
 
 (* condition a variable to be a certain value and retain the rest of the cpd *)
 (* returns a hashtable on the conditioned variables *)
-let condition cpd_data idxs_keys idxs_keys_len : (string array, cpd_line list) Hashtbl.t =
+let condition cpd_data idxs_keys idxs_keys_len : (id array, cpd_line list) Hashtbl.t =
   let h = Hashtbl.create 10 in
   match cpd_data with [] -> h | _ ->
   let len_vars = 
@@ -316,7 +352,7 @@ let normalize_and_real cpd =
 
 
 (* ******* tests *************************************)
-
+(*
 let test_cpd = {vars=[|"a";"b"|]; 
                 backptrs=[||];
                 data=[
@@ -396,4 +432,4 @@ let div_test () = div test_cpd2 test_cpd'
 let marginalize_test () = marginalize test_cpd2' [0;2]
 let marginalize_test2 () = marginalize test_cpd2' [1]
 
-
+*)

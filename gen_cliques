@@ -1,4 +1,4 @@
 python gen_cliques.py hw2-files/network-grid10x10-t10.txt cliquetree-grid10x10-t10.txt
 python gen_cliques.py hw2-files/network-grid10x10-t100.txt cliquetree-grid10x10-t100.txt
-python gen_cliques.py hw2-files/network-grid10x10-t1000.txt cliquetree-grid10x10-t100.txt
+python gen_cliques.py hw2-files/network-grid10x10-t1000.txt cliquetree-grid10x10-t1000.txt
 python gen_cliques.py hw2-files/network-grid25x25-t100.txt cliquetree-grid25x25-t100.txt

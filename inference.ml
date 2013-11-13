@@ -90,15 +90,16 @@ let run () =
   let scheme = if params.action=MaxProductInference 
                then MaxProduct else SumProduct in
   let tree = parse_clique_tree params.cliquetree_file in
-  (*print_endline "parsed clique tree";*)
+  print_endline "parsed clique tree";
   set_tree_sepsets tree;
-  (*print_endline "set sepsets";*)
+  print_endline "set sepsets";
   let cpd_list = parse_cpd params.cpd_file in
-  (*print_endline "parsed cpds";*)
+  print_endline "parsed cpds";
   let query_list = parse_queries ~scheme params.queries_file in
+  print_endline "parsed queries";
   let tree = tree_fill_cpds tree cpd_list in
   save_node_cpds tree;
-  (*print_endline "filled tree with cpds";*)
+  print_endline "filled tree with cpds";
   match params.action with
   | Print_CPDs -> print_endline @: string_of_cpd_list cpd_list
   | Print_Tree -> print_tree tree
@@ -129,6 +130,7 @@ let run () =
       (* don't do an early pass *)
       let answers = process_queries_max stream_fn tree query_list in
       List.iter (function (p, var_list) ->
+          let var_list = str_of_id_pairs var_list in
           Printf.printf "%.13f: %s\n" p (string_of_assignments var_list)
         )
         answers

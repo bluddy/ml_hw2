@@ -2,7 +2,7 @@ open Util
 open CliqueTree
 open Cpd
 
-type assign = (string * string)
+type assign = (id * id)
 
 type query = { 
   p_of  : assign list;
@@ -13,7 +13,7 @@ let string_of_assignments ss =
   let ss = List.map (fun (k,v) -> Printf.sprintf "%s = %s" k v) ss in
   String.concat ", " ss
 
-let parse_queries ~scheme file =
+let parse_queries ~scheme file : query list =
   let get_key_val str = 
     let xs = r_split "=" str in
     hd xs, at xs 1
@@ -25,16 +25,16 @@ let parse_queries ~scheme file =
     | [q; dep] -> 
         let qs = r_split "," q in
         let p_of = match scheme with
-          | SumProduct -> List.map get_key_val qs
-          | MaxProduct -> List.map (fun s -> s,"") qs
+          | SumProduct -> id_of_str_pairs @: List.map get_key_val qs
+          | MaxProduct -> id_of_str_pairs @: List.map (fun s -> s,"") qs
         in
         let deps = r_split "," dep in
-        let given = List.map get_key_val deps in
+        let given = id_of_str_pairs @: List.map get_key_val deps in
         {p_of; given}
 
     | [q] -> 
         let qs = r_split "," q in
-        let p_of = List.map get_key_val qs in
+        let p_of = id_of_str_pairs @: List.map get_key_val qs in
         {p_of; given=[]}
         
     | _ -> failwith "invalid query format"
@@ -120,12 +120,16 @@ let process_queries_max stream_fn tree q_list : (float * assign list) list =
     let q_vars_arr = Array.of_list @: fst_many q.p_of in
     reset_edges_all tree;
     restore_node_cpds tree;
+    print_endline "apply_evidence";
     apply_evidence tree q.given;
+    print_endline "find_root";
     let root = match maxproduct_find_root tree q_vars_arr with
       | None   -> failwith "couldn't find appropriate root"
       | Some r -> r
     in
+    print_endline "upstream";
     stream_fn tree root; (* upstream only *)
+    print_endline "done upstream";
     let _, node_idxs, _, diff_idxs = 
       intersect q_vars_arr root.node_cpd.vars in
     let cpd = root.node_cpd in
